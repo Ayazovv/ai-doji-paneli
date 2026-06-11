@@ -28,10 +28,15 @@ MARKETS = [
 ]
 
 # --- SAF PYTHON MATEMATİĞİ İLE İNDİKATÖR HESAPLAMA (KÜTÜPHANESİZ) ---
-def analiz_et_safe(market, min_hours):
+def analiz_et_safe(market, min_hours, interval):  # 👈 interval parametresi eklendi
     try:
-        # 1. VERİ SETİNİ BÜYÜTTÜK: 1 aylık yerine 1 yıllık veri çekiyoruz (Yapay zeka aç kalmasın)
-        df = yf.download(market["symbol"], period="1y", interval="1h", progress=False)
+        # Seçilen zaman dilimine göre geriye dönük veri süresini dinamik ayarlıyoruz
+        if interval == "15m": periyot = "1mo"
+        elif interval == "1h": periyot = "1y"
+        elif interval == "4h": periyot = "2y"
+        else: periyot = "5y" # 1d için
+        
+        df = yf.download(market["symbol"], period=periyot, interval=interval, progress=False)
         if df.empty: return None
         
         if isinstance(df.columns, pd.MultiIndex):
@@ -49,7 +54,7 @@ def analiz_et_safe(market, min_hours):
         rs = gain / (loss + 1e-10)
         df['RSI'] = 100 - (100 / (1 + rs))
         
-       # EMA20 Hesaplama
+        # EMA20 Hesaplama
         df['EMA20'] = df['Close'].ewm(span=20, adjust=False).mean()
         
         # --- EN GELİŞMİŞ ÖZELLİKLER (FEATURE ENGINEERING) ---
@@ -65,12 +70,10 @@ def analiz_et_safe(market, min_hours):
         df['ATR'] = true_range.rolling(14).mean()
 
         # 3. Mumun İğne Oranları (Yapay zekanın Doji'nin şeklini/baskısını anlamasını sağlar)
-        # Üst iğne boyu / Toplam boy
         df['Upper_Shadow'] = (df['High'] - df[['Open', 'Close']].max(axis=1)) / (df['High'] - df['Low'] + 1e-10)
-        # Alt iğne boyu / Toplam boy
         df['Lower_Shadow'] = (df[['Open', 'Close']].min(axis=1) - df['Low']) / (df['High'] - df['Low'] + 1e-10)
 
-        # 4. Hacim Şoku (Son 5 saatin hacmi, genel ortalamanın üzerinde mi? Para girişi var mı?)
+        # 4. Hacim Şoku (Son 5 mumu genel ortalamayla kıyaslar)
         df['Volume_Shock'] = df['Volume'].rolling(5).mean() / (df['Volume'].rolling(20).mean() + 1e-10)
         
         df = df.dropna()
@@ -83,14 +86,16 @@ def analiz_et_safe(market, min_hours):
         su_an = datetime.now(timezone.utc)
         gecen_saat = round((su_an - son_doji_zaman).total_seconds() / 3600, 1)
         
-        # Saat Filtresi
-        if gecen_saat < min_hours or gecen_saat > 24: return None
+        # Seçilen interval'e göre dinamik saat/mum farkı kontrolü
+        saat_katsayisi = 0.25 if interval == "15m" else (4 if interval == "4h" else (24 if interval == "1d" else 1))
+        gecen_mum = round(gecen_saat / saat_katsayisi, 1)
         
-        # Hedef Tanımlama (4 saat sonrası)
+        if gecen_mum < min_hours or gecen_mum > (24 / saat_katsayisi): return None
+        
+        # Hedef Tanımlama (4 mum sonrası)
         df['Hedef'] = np.where(df['Close'].shift(-4) > df['Close'], 1, 0)
         
         # --- YENİ GELİŞMİŞ ÖZELLİK LİSTEMİZ ---
-        # Yapay zekaya artık sadece RSI değil, bu 6 profesyonel veriyi birden besliyoruz:
         özellikler = ['RSI', 'Price_to_EMA20', 'ATR', 'Upper_Shadow', 'Lower_Shadow', 'Volume_Shock']
         
         X = df[özellikler].iloc[:-4]
@@ -98,19 +103,7 @@ def analiz_et_safe(market, min_hours):
         
         # Yapay Zeka Eğitimi
         if len(X) > 50:
-            # max_depth ekleyerek modelin ezberlemesini (overfitting) engelledik
             model = RandomForestClassifier(n_estimators=60, max_depth=8, random_state=42)
-            model.fit(X, y)
-            son_veri = df[özellikler].iloc[[-1]]
-            tahmin_yon = model.predict(son_veri)[0]
-            guven_orani = int(max(model.predict_proba(son_veri)[0]) * 100)
-        else:
-            tahmin_yon = 1 if df['RSI'].iloc[-1] < 50 else 0
-            guven_orani = 55
-        
-        # Yapay Zeka Eğitimi (Artık elinde yüzlerce satır veri var)
-        if len(X) > 50:
-            model = RandomForestClassifier(n_estimators=50, max_depth=7, random_state=42)
             model.fit(X, y)
             son_veri = df[özellikler].iloc[[-1]]
             tahmin_yon = model.predict(son_veri)[0]
@@ -127,7 +120,7 @@ def analiz_et_safe(market, min_hours):
         else: doji_type = "Standard"
         
         return {
-            "hoursAgo": gecen_saat,
+            "hoursAgo": gecen_mum, # Kartta düzgün görünmesi için mum bazlı saklıyoruz
             "signal": signal,
             "rsi": rsi_val,
             "confidence": guven_orani,
@@ -147,6 +140,8 @@ if "results" not in st.session_state:
     st.session_state.results = {}
 if "chart_open" not in st.session_state:
     st.session_state.chart_open = None
+if "interval" not in st.session_state:
+    st.session_state.interval = "1h"
 
 # Stil Tanımlamaları
 st.markdown("""
@@ -173,7 +168,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# --- TRADINGVIEW MODAL ALANI (SAYFA BAŞINDA DURMASI ÇAKIŞMALARI ENGELLER) ---
+# --- TRADINGVIEW MODAL ALANI ---
 if st.session_state.chart_open:
     c_market = st.session_state.chart_open
     
@@ -182,33 +177,34 @@ if st.session_state.chart_open:
     rsi_degeri = "-"
     sinyal_yonu = "-"
     
-    # Python'da bulduğumuz Doji saatini çekelim
     if c_market["symbol"] in st.session_state.results:
         res_data = st.session_state.results[c_market["symbol"]]["result"]
         doji_turu = res_data["dojiType"]
-        gecen_sure = f"{res_data['hoursAgo']} Saat Önce"
+        gecen_sure = f"{res_data['hoursAgo']} Mum Önce"
         rsi_degeri = res_data["rsi"]
         sinyal_yonu = res_data["signal"]
 
     st.markdown(f"### 📊 Canlı Grafik: {c_market['name']} ({c_market['tv']})")
     
-    # Kullanıcıya nerede arayacağını net gösteren yeni bilgi paneli
     border_color = "#34D399" if sinyal_yonu == "BUY" else "#F87171"
     st.markdown(f"""
     <div style="background: #0F172A; border: 1px solid #1E293B; border-left: 5px solid {border_color}; padding: 15px; margin-bottom: 15px; border-radius: 8px;">
-        <h4 style="margin: 0 0 8px 0; color: #FFF; font-size: 15px;">🔍 Doji Formasyon Lokasyonu</h4>
+        <h4 style="margin: 0 0 8px 0; color: #FFF; font-size: 15px;">🔍 Doji Formasyon Lokasyonu ({st.session_state.interval} Grafik)</h4>
         <p style="margin: 0; font-size: 13px; color: #94A3B8; line-height: 1.5;">
             • <b>Tespit Edilen Tür:</b> <span style="color: #F59E0B;">{doji_turu} Doji</span><br>
             • <b>Zaman:</b> Grafikteki <b>en sağdaki (son) mumlardan yaklaşık {gecen_sure} önceki</b> muma bakmalısınız.<br>
             • <b>RSI Durumu:</b> {rsi_degeri} (Yapay zeka bu doğrultuda <b style="color: {border_color};">{sinyal_yonu}</b> yönlü tahmin üretti).
         </p>
         <p style="margin: 8px 0 0 0; font-size: 12px; color: #64748B; font-style: italic;">
-            Not: TradingView widget kısıtlamaları nedeniyle grafik üzerine harici "D" harfi basılamamaktadır. Lütfen son mumdan geriye doğru saat hesabı yapınız.
+            Not: TradingView kısıtlamaları nedeniyle grafik üzerine harici "D" harfi basılamamaktadır. Lütfen son mumdan geriye doğru seçtiğiniz zaman diliminde mum sayınız.
         </p>
     </div>
     """, unsafe_allow_html=True)
     
-    # Temizlenmiş ve kararlı TradingView kodu
+    # TradingView Zaman Dilimi Eşleştirmesi
+    tv_interval_map = {"15m": "15", "1h": "60", "4h": "240", "1d": "D"}
+    secilen_tv_interval = tv_interval_map.get(st.session_state.interval, "60")
+    
     html_code = """
     <div id="tv-chart-container" style="height:500px;"></div>
     <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
@@ -216,7 +212,7 @@ if st.session_state.chart_open:
     new TradingView.widget({
       "autosize": true,
       "symbol": \"""" + str(c_market['tv']) + """\",
-      "interval": "60",
+      "interval": \"""" + secilen_tv_interval + """\",
       "timezone": "Europe/Istanbul",
       "theme": "dark",
       "style": "1",
@@ -249,14 +245,18 @@ for i, m in enumerate(MARKETS):
             else: st.session_state.selected_markets.append(m["symbol"])
             st.rerun()
 
-st.session_state.min_hours = st.slider("🎯 Doji Sonrası Minimum Geçmesi Gereken Süre (Saat)", 1, 12, st.session_state.min_hours)
+# Yeni Eklenen Zaman Dilimi Dropdown Kutusu (Tasarımı bozmaz)
+st.session_state.interval = st.selectbox("⏳ Analiz Zaman Dilimi (Periyot)", ["15m", "1h", "4h", "1d"], index=1)
+
+st.session_state.min_hours = st.slider("🎯 Doji Sonrası Minimum Geçmesi Gereken Süre (Mum Sayısı)", 1, 12, st.session_state.min_hours)
 
 if st.button("🚀 Piyasaları Canlı Tara ve Analiz Et", key="scan_markets_main"):
     with st.spinner("Canlı fiyat verileri çekiliyor ve yapay zeka eğitiliyor..."):
         yeni_sonuclar = {}
         for m in MARKETS:
             if m["symbol"] in st.session_state.selected_markets:
-                analiz = analiz_et_safe(m, st.session_state.min_hours)
+                # Fonksiyona seçilen interval parametresini de gönderiyoruz
+                analiz = analiz_et_safe(m, st.session_state.min_hours, st.session_state.interval)
                 if analiz:
                     yeni_sonuclar[m["symbol"]] = {"market": m, "result": analiz}
         st.session_state.results = yeni_sonuclar
@@ -265,7 +265,7 @@ if st.button("🚀 Piyasaları Canlı Tara ve Analiz Et", key="scan_markets_main
 if not st.session_state.results:
     st.markdown("""
     <div style="background: #0F172A; border: 1px solid #1E293B; border-radius: 12px; padding: 40px; text-align: center; margin-top: 20px;">
-        <p style="color: #64748B; font-weight: 600; margin: 0;">Şu anda belirlediğin saat kriterine uyan aktif bir Doji sinyali yok.</p>
+        <p style="color: #64748B; font-weight: 600; margin: 0;">Şu anda belirlediğin kriterlere uyan aktif bir Doji sinyali yok.</p>
         <p style="color: #475569; font-size: 12px; margin: 5px 0 0 0;">"Piyasaları Canlı Tara" butonuna basarak taramayı başlatabilirsin.</p>
     </div>
     """, unsafe_allow_html=True)
@@ -286,7 +286,7 @@ else:
                     <strong style="color: #F1F5F9; font-size: 16px;">{m['name']}</strong>
                     <span style="background: #020817; border: 1px solid #334155; color: #64748B; font-size: 11px; padding: 2px 6px; border-radius: 4px; margin-left: 8px;">{m['category']}</span>
                     <div style="color: #94A3B8; font-size: 13px; margin-top: 4px;">
-                        ⏳ <b>Doji üzerinden geçen süre: {r['hoursAgo']} Saat</b> ({r['dojiType']} Doji)
+                        ⏳ <b>Doji üzerinden geçen süre: {r['hoursAgo']} Mum</b> ({r['dojiType']} Doji)
                     </div>
                     <div style="margin-top: 8px; display: flex; gap: 8px;">
                         <span style="background: {badge_bg}; border: 1px solid {border_color}; color: {border_color}; padding: 3px 10px; border-radius: 6px; font-weight: 700;">{r['signal']}</span>
@@ -302,7 +302,6 @@ else:
         </div>
         """, unsafe_allow_html=True)
         
-        # Grafik Butonu
         if st.button(f"📊 {m['name']} Canlı Grafiğini İncele", key=f"chart_btn_{m['symbol']}"):
             st.session_state.chart_open = m
             st.rerun()
