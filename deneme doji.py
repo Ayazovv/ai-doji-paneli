@@ -45,10 +45,10 @@ def buyuk_trend_kontrol(symbol):
 # --- SAF PYTHON MATEMATİĞİ İLE İNDİKATÖR HESAPLAMA ---
 def analiz_et_safe(market, min_hours, interval):
     try:
-        if interval == "15m": periyot = "1mo"
-        elif interval == "1h": periyot = "1y"
+        # Periyot mantığı sadeleştirildi (15m kaldırıldı)
+        if interval == "1h": periyot = "1y"
         elif interval == "4h": periyot = "2y"
-        else: periyot = "5y"
+        else: periyot = "5y" # 1d için
         
         df = yf.download(market["symbol"], period=periyot, interval=interval, progress=False)
         if df.empty: return None
@@ -86,7 +86,7 @@ def analiz_et_safe(market, min_hours, interval):
         
         df = df.dropna()
         
-        # 🎯 DÜZELTME: Hedef tanımlamayı (shift) dinamik olarak slider'dan gelen min_hours değerine bağladık!
+        # Hedef tanımlama (Dinamik slider bağantısı)
         df['Hedef'] = np.where(df['Close'].shift(-int(min_hours)) > df['Close'], 1, 0)
         özellikler = ['RSI', 'Price_to_EMA20', 'ATR', 'Upper_Shadow', 'Lower_Shadow', 'Volume_Shock']
         
@@ -98,12 +98,11 @@ def analiz_et_safe(market, min_hours, interval):
         su_an = datetime.now(timezone.utc)
         gecen_saat = round((su_an - son_doji_zaman).total_seconds() / 3600, 1)
         
-        saat_katsayisi = 0.25 if interval == "15m" else (4 if interval == "4h" else (24 if interval == "1d" else 1))
+        saat_katsayisi = 4 if interval == "4h" else (24 if interval == "1d" else 1)
         gecen_mum = round(gecen_saat / saat_katsayisi, 1)
         
         if gecen_mum < min_hours or gecen_mum > (24 / saat_katsayisi): return None
         
-        # Tahmin aralığı kadar mumu eğitim setinden güvenle düşüyoruz
         X = df[özellikler].iloc[:-int(min_hours)]
         y = df['Hedef'].iloc[:-int(min_hours)]
         
@@ -225,7 +224,7 @@ if st.session_state.chart_open:
     </div>
     """, unsafe_allow_html=True)
     
-    tv_interval_map = {"15m": "15", "1h": "60", "4h": "240", "1d": "D"}
+    tv_interval_map = {"1h": "60", "4h": "240", "1d": "D"}
     secilen_tv_interval = tv_interval_map.get(st.session_state.interval, "60")
     
     html_code = """
@@ -268,7 +267,8 @@ for i, m in enumerate(MARKETS):
             else: st.session_state.selected_markets.append(m["symbol"])
             st.rerun()
 
-st.session_state.interval = st.selectbox("⏳ Analiz Zaman Dilimi (Periyot)", ["15m", "1h", "4h", "1d"], index=1)
+# Seçenek kutusundan 15m temizlendi 👇
+st.session_state.interval = st.selectbox("⏳ Analiz Zaman Dilimi (Periyot)", ["1h", "4h", "1d"], index=0)
 st.session_state.min_hours = st.slider("🎯 Doji Sonrası Geçen / AI Tahmin Süresi (Mum Sayısı)", 1, 12, st.session_state.min_hours)
 
 if st.button("🚀 Piyasaları Canlı Tara ve Analiz Et", key="scan_markets_main"):
@@ -306,7 +306,6 @@ else:
         else:
             confluence_badge = '<span style="background: rgba(239, 68, 68, 0.1); border: 1px solid #EF4444; color: #EF4444; padding: 3px 10px; border-radius: 6px; font-weight: 800;">⚠️ Trend Tersi Riskli</span>'
         
-        # 🎯 DÜZELTME: Kart içerisindeki turuncu win-rate metnini kafa karıştırmayacak şekilde güncelledik
         st.markdown(f"""
         <div style="background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%); border: 1px solid #1E293B; border-left: 5px solid {border_color}; border-radius: 10px; padding: 15px; margin-bottom: 12px;">
             <div style="display: flex; justify-content: space-between; align-items: center;">
