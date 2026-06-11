@@ -30,25 +30,52 @@ MARKETS = [
 # --- SAF PYTHON MATEMATİĞİ İLE İNDİKATÖR HESAPLAMA (KÜTÜPHANESİZ) ---
 def analiz_et_safe(market, min_hours):
     try:
-        df = yf.download(market["symbol"], period="1mo", interval="1h", progress=False)
+        # 1. VERİ SETİNİ BÜYÜTTÜK: 1 aylık yerine 1 yıllık veri çekiyoruz (Yapay zeka aç kalmasın)
+        df = yf.download(market["symbol"], period="1y", interval="1h", progress=False)
         if df.empty: return None
         
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
             
+        # Doji Tespiti
         govde = abs(df['Open'] - df['Close'])
         toplam_boy = df['High'] - df['Low']
         df['Doji'] = govde <= (toplam_boy * 0.1)
         
+        # RSI Hesaplama
         delta = df['Close'].diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
         rs = gain / (loss + 1e-10)
         df['RSI'] = 100 - (100 / (1 + rs))
         
+       # EMA20 Hesaplama
         df['EMA20'] = df['Close'].ewm(span=20, adjust=False).mean()
+        
+        # --- EN GELİŞMİŞ ÖZELLİKLER (FEATURE ENGINEERING) ---
+        
+        # 1. Fiyatın Ortalamaya Uzaklığı (Trend yönü ezberi için)
+        df['Price_to_EMA20'] = df['Close'] / df['EMA20']
+        
+        # 2. ATR (Piyasadaki oynaklığı/volatiliteyi saf matematik ile ölçüyoruz)
+        high_low = df['High'] - df['Low']
+        high_close = abs(df['High'] - df['Close'].shift())
+        low_close = abs(df['Low'] - df['Close'].shift())
+        true_range = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+        df['ATR'] = true_range.rolling(14).mean()
+
+        # 3. Mumun İğne Oranları (Yapay zekanın Doji'nin şeklini/baskısını anlamasını sağlar)
+        # Üst iğne boyu / Toplam boy
+        df['Upper_Shadow'] = (df['High'] - df[['Open', 'Close']].max(axis=1)) / (df['High'] - df['Low'] + 1e-10)
+        # Alt iğne boyu / Toplam boy
+        df['Lower_Shadow'] = (df[['Open', 'Close']].min(axis=1) - df['Low']) / (df['High'] - df['Low'] + 1e-10)
+
+        # 4. Hacim Şoku (Son 5 saatin hacmi, genel ortalamanın üzerinde mi? Para girişi var mı?)
+        df['Volume_Shock'] = df['Volume'].rolling(5).mean() / (df['Volume'].rolling(20).mean() + 1e-10)
+        
         df = df.dropna()
         
+        # Doji kontrolü
         doji_satirlari = df[df['Doji'] == True]
         if doji_satirlari.empty: return None
         
@@ -56,16 +83,36 @@ def analiz_et_safe(market, min_hours):
         su_an = datetime.now(timezone.utc)
         gecen_saat = round((su_an - son_doji_zaman).total_seconds() / 3600, 1)
         
+        # Saat Filtresi
         if gecen_saat < min_hours or gecen_saat > 24: return None
         
+        # Hedef Tanımlama (4 saat sonrası)
         df['Hedef'] = np.where(df['Close'].shift(-4) > df['Close'], 1, 0)
-        X = df[['RSI', 'EMA20', 'Close']].iloc[:-4]
+        
+        # --- YENİ GELİŞMİŞ ÖZELLİK LİSTEMİZ ---
+        # Yapay zekaya artık sadece RSI değil, bu 6 profesyonel veriyi birden besliyoruz:
+        özellikler = ['RSI', 'Price_to_EMA20', 'ATR', 'Upper_Shadow', 'Lower_Shadow', 'Volume_Shock']
+        
+        X = df[özellikler].iloc[:-4]
         y = df['Hedef'].iloc[:-4]
         
-        if len(X) > 20:
-            model = RandomForestClassifier(n_estimators=30, random_state=42)
+        # Yapay Zeka Eğitimi
+        if len(X) > 50:
+            # max_depth ekleyerek modelin ezberlemesini (overfitting) engelledik
+            model = RandomForestClassifier(n_estimators=60, max_depth=8, random_state=42)
             model.fit(X, y)
-            son_veri = df[['RSI', 'EMA20', 'Close']].iloc[[-1]]
+            son_veri = df[özellikler].iloc[[-1]]
+            tahmin_yon = model.predict(son_veri)[0]
+            guven_orani = int(max(model.predict_proba(son_veri)[0]) * 100)
+        else:
+            tahmin_yon = 1 if df['RSI'].iloc[-1] < 50 else 0
+            guven_orani = 55
+        
+        # Yapay Zeka Eğitimi (Artık elinde yüzlerce satır veri var)
+        if len(X) > 50:
+            model = RandomForestClassifier(n_estimators=50, max_depth=7, random_state=42)
+            model.fit(X, y)
+            son_veri = df[özellikler].iloc[[-1]]
             tahmin_yon = model.predict(son_veri)[0]
             guven_orani = int(max(model.predict_proba(son_veri)[0]) * 100)
         else:
