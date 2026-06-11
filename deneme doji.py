@@ -28,7 +28,7 @@ MARKETS = [
 ]
 
 # --- SAF PYTHON MATEMATİĞİ İLE İNDİKATÖR HESAPLAMA (KÜTÜPHANESİZ) ---
-def analiz_et_safe(market, min_hours, interval):  # 👈 interval parametresi eklendi
+def analiz_et_safe(market, min_hours, interval):
     try:
         # Seçilen zaman dilimine göre geriye dönük veri süresini dinamik ayarlıyoruz
         if interval == "15m": periyot = "1mo"
@@ -58,27 +58,58 @@ def analiz_et_safe(market, min_hours, interval):  # 👈 interval parametresi ek
         df['EMA20'] = df['Close'].ewm(span=20, adjust=False).mean()
         
         # --- EN GELİŞMİŞ ÖZELLİKLER (FEATURE ENGINEERING) ---
-        
-        # 1. Fiyatın Ortalamaya Uzaklığı (Trend yönü ezberi için)
         df['Price_to_EMA20'] = df['Close'] / df['EMA20']
         
-        # 2. ATR (Piyasadaki oynaklığı/volatiliteyi saf matematik ile ölçüyoruz)
         high_low = df['High'] - df['Low']
         high_close = abs(df['High'] - df['Close'].shift())
         low_close = abs(df['Low'] - df['Close'].shift())
         true_range = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
         df['ATR'] = true_range.rolling(14).mean()
 
-        # 3. Mumun İğne Oranları (Yapay zekanın Doji'nin şeklini/baskısını anlamasını sağlar)
         df['Upper_Shadow'] = (df['High'] - df[['Open', 'Close']].max(axis=1)) / (df['High'] - df['Low'] + 1e-10)
         df['Lower_Shadow'] = (df[['Open', 'Close']].min(axis=1) - df['Low']) / (df['High'] - df['Low'] + 1e-10)
-
-        # 4. Hacim Şoku (Son 5 mumu genel ortalamayla kıyaslar)
         df['Volume_Shock'] = df['Volume'].rolling(5).mean() / (df['Volume'].rolling(20).mean() + 1e-10)
         
         df = df.dropna()
         
-        # Doji kontrolü
+        # Hedef Tanımlama (4 mum sonrası)
+        df['Hedef'] = np.where(df['Close'].shift(-4) > df['Close'], 1, 0)
+        
+        özellikler = ['RSI', 'Price_to_EMA20', 'ATR', 'Upper_Shadow', 'Lower_Shadow', 'Volume_Shock']
+        
+        # --- 📈 SIFIRDAN YAZILAN GEÇMİŞİ TEST ETME (BACKTEST) MOTORU ---
+        # Sadece Doji mumu olan satırları bulup yapay zekanın geçmiş başarısını ölçüyoruz
+        doji_indices = df[df['Doji'] == True].index
+        basarili_tahmin = 0
+        toplam_sinyal = 0
+        
+        # Eğer geçmişte yeterli veri varsa simülasyonu çalıştır
+        if len(df) > 100 and len(doji_indices) > 5:
+            # Yapay zekayı kayan pencere mantığıyla (Time-Series benzeri) geçmişte test ediyoruz
+            for idx in doji_indices[:-5]: # Son 5 Doji'yi canlı analiz için ayırıyoruz
+                loc_idx = df.index.get_loc(idx)
+                if loc_idx < 40: continue # Eğitim için minimum veri sınırı
+                
+                # O Doji mumuna kadar olan geçmiş verilerle modeli anlık eğit
+                X_hist = df[özellikler].iloc[:loc_idx]
+                y_hist = df['Hedef'].iloc[:loc_idx]
+                
+                hist_model = RandomForestClassifier(n_estimators=30, max_depth=6, random_state=42)
+                hist_model.fit(X_hist, y_hist)
+                
+                # Doji mumu anındaki tahmini al
+                current_feat = df[özellikler].iloc[[loc_idx]]
+                pred = hist_model.predict(current_feat)[0]
+                actual = df['Hedef'].iloc[loc_idx] # 4 saat sonra ne olduğu
+                
+                if pred == actual:
+                    basarili_tahmin += 1
+                toplam_sinyal += 1
+                
+        win_rate = int((basarili_tahmin / toplam_sinyal) * 100) if toplam_sinyal > 0 else 50
+        # -------------------------------------------------------------
+        
+        # Canlı Doji Kontrolü (Arayüzde gösterilecek son mum analizi)
         doji_satirlari = df[df['Doji'] == True]
         if doji_satirlari.empty: return None
         
@@ -86,22 +117,15 @@ def analiz_et_safe(market, min_hours, interval):  # 👈 interval parametresi ek
         su_an = datetime.now(timezone.utc)
         gecen_saat = round((su_an - son_doji_zaman).total_seconds() / 3600, 1)
         
-        # Seçilen interval'e göre dinamik saat/mum farkı kontrolü
         saat_katsayisi = 0.25 if interval == "15m" else (4 if interval == "4h" else (24 if interval == "1d" else 1))
         gecen_mum = round(gecen_saat / saat_katsayisi, 1)
         
         if gecen_mum < min_hours or gecen_mum > (24 / saat_katsayisi): return None
         
-        # Hedef Tanımlama (4 mum sonrası)
-        df['Hedef'] = np.where(df['Close'].shift(-4) > df['Close'], 1, 0)
-        
-        # --- YENİ GELİŞMİŞ ÖZELLİK LİSTEMİZ ---
-        özellikler = ['RSI', 'Price_to_EMA20', 'ATR', 'Upper_Shadow', 'Lower_Shadow', 'Volume_Shock']
-        
         X = df[özellikler].iloc[:-4]
         y = df['Hedef'].iloc[:-4]
         
-        # Yapay Zeka Eğitimi
+        # Canlı Sinyal Yapay Zeka Eğitimi
         if len(X) > 50:
             model = RandomForestClassifier(n_estimators=60, max_depth=8, random_state=42)
             model.fit(X, y)
@@ -120,10 +144,12 @@ def analiz_et_safe(market, min_hours, interval):  # 👈 interval parametresi ek
         else: doji_type = "Standard"
         
         return {
-            "hoursAgo": gecen_mum, # Kartta düzgün görünmesi için mum bazlı saklıyoruz
+            "hoursAgo": gecen_mum,
             "signal": signal,
             "rsi": rsi_val,
             "confidence": guven_orani,
+            "winRate": win_rate,  # 👈 Hesaplanan win rate değerini dışarı aktarıyoruz
+            "totalSignals": toplam_sinyal, # 👈 Toplam test edilen sinyal sayısı
             "price": float(df['Close'].iloc[-1]),
             "change": float(((df['Close'].iloc[-1] - df['Open'].iloc[-12]) / df['Open'].iloc[-12]) * 100),
             "dojiType": doji_type
@@ -288,9 +314,10 @@ else:
                     <div style="color: #94A3B8; font-size: 13px; margin-top: 4px;">
                         ⏳ <b>Doji üzerinden geçen süre: {r['hoursAgo']} Mum</b> ({r['dojiType']} Doji)
                     </div>
-                    <div style="margin-top: 8px; display: flex; gap: 8px;">
+                    <div style="margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap;">
                         <span style="background: {badge_bg}; border: 1px solid {border_color}; color: {border_color}; padding: 3px 10px; border-radius: 6px; font-weight: 700;">{r['signal']}</span>
-                        <span style="background: #020817; border: 1px solid #1E293B; color: #94A3B8; padding: 3px 10px; border-radius: 6px;">Yapay Zeka Doğruluğu: %{r['confidence']}</span>
+                        <span style="background: #020817; border: 1px solid #1E293B; color: #94A3B8; padding: 3px 10px; border-radius: 6px;">Tahmin Güveni: %{r['confidence']}</span>
+                        <span style="background: #1E293B; border: 1px solid #F59E0B; color: #F59E0B; padding: 3px 10px; border-radius: 6px; font-weight: 600;">🎯 Tarihsel Win-Rate: %{r['winRate']} ({r['totalSignals']} Sinyal)</span>
                         <span style="background: #020817; border: 1px solid #1E293B; color: #94A3B8; padding: 3px 10px; border-radius: 6px;">RSI: {r['rsi']}</span>
                     </div>
                 </div>
