@@ -125,35 +125,72 @@ def buyuk_trend_kontrol(symbol):
 
 def analiz_et_safe(market, min_hours, interval):
     try:
-       # Veri setini daraltarak indirme ve öğrenme süresini x3 hızlandırıyoruz
-        if interval == "1h": periyot = "3mo"    # 1 yıl yerine 3 aylık veri 1h için fazlasıyla yeterli
-        elif interval == "4h": periyot = "6mo"  # 2 yıl yerine 6 aylık veri
-        else: periyot = "2y"                    # 5 yıl yerine 2 yıllık veri
+        # Veri setini daraltarak indirme ve öğrenme süresini x3 hızlandırıyoruz
+        if interval == "1h": periyot = "3mo"
+        elif interval == "4h": periyot = "6mo"
+        else: periyot = "2y"
+        
         df = yf.download(market["symbol"], period=periyot, interval=interval, progress=False)
         if df.empty: return None
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
+            
+        # --- TEMEL DOJİ VE FİYAT METRİKLERİ ---
         govde = abs(df['Open'] - df['Close'])
         toplam_boy = df['High'] - df['Low']
         df['Doji'] = govde <= (toplam_boy * 0.1)
+        
+        # --- 🧠 1. KLASİK GÖSTERGELER ---
         delta = df['Close'].diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
         rs = gain / (loss + 1e-10)
         df['RSI'] = 100 - (100 / (1 + rs))
+        
         df['EMA20'] = df['Close'].ewm(span=20, adjust=False).mean()
         df['Price_to_EMA20'] = df['Close'] / df['EMA20']
+        
         high_low = df['High'] - df['Low']
         high_close = abs(df['High'] - df['Close'].shift())
         low_close = abs(df['Low'] - df['Close'].shift())
         true_range = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
         df['ATR'] = true_range.rolling(14).mean()
+        
         df['Upper_Shadow'] = (df['High'] - df[['Open', 'Close']].max(axis=1)) / (df['High'] - df['Low'] + 1e-10)
         df['Lower_Shadow'] = (df[['Open', 'Close']].min(axis=1) - df['Low']) / (df['High'] - df['Low'] + 1e-10)
         df['Volume_Shock'] = df['Volume'].rolling(5).mean() / (df['Volume'].rolling(20).mean() + 1e-10)
+        
+        # --- 🔥 2. YENİ PROFESYONEL GÖSTERGELER (FEATURE ENGINEERING) 🔥 ---
+        
+        # A. MACD (Momentum)
+        ema12 = df['Close'].ewm(span=12, adjust=False).mean()
+        ema26 = df['Close'].ewm(span=26, adjust=False).mean()
+        macd_line = ema12 - ema26
+        macd_signal = macd_line.ewm(span=9, adjust=False).mean()
+        df['MACD_Hist'] = macd_line - macd_signal
+        
+        # B. Bollinger Bantları (Volatilite Sıkışması ve Aşırılıklar)
+        sma20 = df['Close'].rolling(window=20).mean()
+        std20 = df['Close'].rolling(window=20).std()
+        df['Upper_BB'] = sma20 + (2 * std20)
+        df['Lower_BB'] = sma20 - (2 * std20)
+        # Bant genişliği (Düşükse patlama yakındır)
+        df['BB_Width'] = (df['Upper_BB'] - df['Lower_BB']) / (sma20 + 1e-10)
+        # Fiyatın banta göre konumu (0=Alt Bantta, 1=Üst Bantta)
+        df['Price_to_BB'] = (df['Close'] - df['Lower_BB']) / (df['Upper_BB'] - df['Lower_BB'] + 1e-10)
+        
+        # C. Kısa Vadeli Trend Eğimi (Momentum İvmesi)
+        df['Trend_Slope'] = df['EMA20'].diff(3) / (df['EMA20'] + 1e-10) * 100
+
+        # Verileri temizle ve Hedefi belirle
         df = df.dropna()
         df['Hedef'] = np.where(df['Close'].shift(-int(min_hours)) > df['Close'], 1, 0)
-        özellikler = ['RSI', 'Price_to_EMA20', 'ATR', 'Upper_Shadow', 'Lower_Shadow', 'Volume_Shock']
+        
+        # Modele verilecek olan yeni ZENGİN menü (10 Farklı Metrik)
+        özellikler = [
+            'RSI', 'Price_to_EMA20', 'ATR', 'Upper_Shadow', 'Lower_Shadow', 
+            'Volume_Shock', 'MACD_Hist', 'BB_Width', 'Price_to_BB', 'Trend_Slope'
+        ]
         
         doji_satirlari = df[df['Doji'] == True]
         if doji_satirlari.empty: return None
@@ -177,17 +214,17 @@ def analiz_et_safe(market, min_hours, interval):
         min_required_len = 15 if is_forced else 50
         
         if len(X) > min_required_len:
-            # --- Maksimum İsabet (High Accuracy & Anti-Overfit) Modeli ---
+            # --- Maksimum İsabet ve Genelleme (Anti-Overfit) Modeli ---
             model = xgb.XGBClassifier(
-                n_estimators=300,        # Ağaç sayısını artırdık. Daha fazla varyasyonu inceler.
-                max_depth=4,             # Derinliği 5'ten 4'e DÜŞÜRDÜK! (Çok kritik: Modelin gürültüyü ezberlemesini engeller, sadece ana trendi yakalar).
-                learning_rate=0.01,      # Öğrenme hızını çok düşürdük. Model acele etmeden, sindire sindire öğrenir.
-                subsample=0.7,           # Her adımda geçmiş verinin rastgele %70'ine bakar (Piyasa manipülasyonlarına karşı körlük sağlar).
-                colsample_bytree=0.7,    # Her adımda indikatörlerin rastgele %70'ini kullanır (Sadece RSI'a veya hacme bağımlı kalmasını önler).
-                gamma=0.1,               # Yeni eklendi: Sadece gerçekten kârlı olacaksa yeni bir karar dalı oluşturur (Gereksiz işlemleri budar).
+                n_estimators=300,
+                max_depth=4,             # Gürültüyü ezberlememesi için düşük tutuldu
+                learning_rate=0.01,      # Yavaş ve sağlam öğrenme
+                subsample=0.7,           # Verinin %70'ine bakarak manipülasyonlara kör olur
+                colsample_bytree=0.7,    # Her ağaç özelliklerin (RSI, MACD vb.) %70'ini kullanır
+                gamma=0.1,               # Sadece çok güçlüyse karar dalı oluşturur
                 random_state=42,
                 eval_metric='logloss',
-                n_jobs=-1                # Hız için sunucunun tüm çekirdekleri aktif.
+                n_jobs=-1                # Tüm çekirdekler aktif
             )
             
             model.fit(X, y)
@@ -199,6 +236,7 @@ def analiz_et_safe(market, min_hours, interval):
                 toplam_sinyal = len(y_doji)
                 basarili_tahmin = np.sum(preds == y_doji.values)
                 if toplam_sinyal > 0: win_rate = int((basarili_tahmin / toplam_sinyal) * 100)
+                
             son_veri = df[özellikler].iloc[[-1]]
             tahmin_yon = model.predict(son_veri)[0]
             guven_orani = int(max(model.predict_proba(son_veri)[0]) * 100)
@@ -220,7 +258,8 @@ def analiz_et_safe(market, min_hours, interval):
             "change": float(((df['Close'].iloc[-1] - df['Open'].iloc[-12]) / df['Open'].iloc[-12]) * 100),
             "dojiType": doji_type
         }
-    except:
+    except Exception as e:
+        # Sorun çıkarsa terminalde görmek istersen print(e) yazabilirsin
         return None
 
 # --- STATE TANIMLAMALARI ---
