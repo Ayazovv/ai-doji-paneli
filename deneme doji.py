@@ -306,6 +306,7 @@ if secilen_sayfa == "🏠 Genel Dashboard":
         
     aktif_list = MARKETS
     st.markdown("""<div style="background:rgba(30,41,59,0.5); border:1px dashed #334155; padding:12px; border-radius:8px; margin-bottom:20px;"><div style="display:flex; gap:20px; flex-wrap:wrap; font-size:11px; color:#94A3B8; line-height:1.4;"><div>🔴 <b style="color:#EF4444;">Aşırı Korku (0-30):</b> BUY yönlü dönüş şansı yüksek.</div><div>⚪ <b style="color:#94A3B8;">Nötr (45-55):</b> Doji daha stabil çalışır.</div><div>🟢 <b style="color:#34D399;">Aşırı Açgözlülük (75-100):</b> BUY sinyallerine temkinli yaklaşılmalıdır.</div></div></div>""", unsafe_allow_html=True)
+   
     # --- 🗺️ CANLI PİYASA REJİMİ ISI HARİTASI ---
     st.markdown("<h3 style='color: #F1F5F9; font-size: 16px; margin-top: 15px; margin-bottom: 10px;'>🗺️ Canlı Piyasa Rejimi (Heatmap)</h3>", unsafe_allow_html=True)
 
@@ -313,17 +314,14 @@ if secilen_sayfa == "🏠 Genel Dashboard":
         heatmap_html = "<div style='display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 25px;'>"
         for m in MARKETS:
             rejim, renk = piyasa_rejimi_hesapla(m["symbol"])
-            heatmap_html += f"""
-            <div style='background: {renk}; padding: 12px; border-radius: 8px; text-align: center; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 4px 6px rgba(0,0,0,0.1);'>
-                <div style='color: rgba(255,255,255,0.9); font-size: 11px; font-weight: 700; margin-bottom: 4px;'>{m['name']}</div>
-                <div style='color: #FFF; font-size: 13px; font-weight: 800;'>{rejim}</div>
-            </div>
-            """
+            # Streamlit kod bloğu sanmasın diye HTML tek satıra sıkıştırıldı
+            heatmap_html += f"<div style='background: {renk}; padding: 12px; border-radius: 8px; text-align: center; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 4px 6px rgba(0,0,0,0.1);'><div style='color: rgba(255,255,255,0.9); font-size: 11px; font-weight: 700; margin-bottom: 4px;'>{m['name']}</div><div style='color: #FFF; font-size: 13px; font-weight: 800;'>{rejim}</div></div>"
+        
         heatmap_html += "</div>"
         st.markdown(heatmap_html, unsafe_allow_html=True)
         
     st.subheader("🚀 Küresel Takip Listesi (Tüm Piyasalar)")
-
+    
 elif secilen_sayfa == "🪙 Kripto Terminali":
     with st.spinner("Kripto psikolojisi sorgulanıyor..."):
         c_val, c_status, c_color = get_crypto_fng()
