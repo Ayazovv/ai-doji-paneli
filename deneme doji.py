@@ -125,9 +125,10 @@ def buyuk_trend_kontrol(symbol):
 
 def analiz_et_safe(market, min_hours, interval):
     try:
-        if interval == "1h": periyot = "1y"
-        elif interval == "4h": periyot = "2y"
-        else: periyot = "5y"
+       # Veri setini daraltarak indirme ve öğrenme süresini x3 hızlandırıyoruz
+        if interval == "1h": periyot = "3mo"    # 1 yıl yerine 3 aylık veri 1h için fazlasıyla yeterli
+        elif interval == "4h": periyot = "6mo"  # 2 yıl yerine 6 aylık veri
+        else: periyot = "2y"                    # 5 yıl yerine 2 yıllık veri
         df = yf.download(market["symbol"], period=periyot, interval=interval, progress=False)
         if df.empty: return None
         if isinstance(df.columns, pd.MultiIndex):
