@@ -299,9 +299,18 @@ with fng_cols[2]:
     </div>
     """, unsafe_allow_html=True)
 
-# --- PİYASA PSİKOLOJİSİ KULLANICI KILAVUZU (BİLGİ NOTU) ---
-st.markdown("""
-<div style="background: rgba(30, 41, 59, 0.5); border: 1px dashed #334155; padding: 12px; border-radius: 8px; margin-bottom: 20px;">
+# --- PİYASA PSİKOLOJİSİ KULLANICI KILAVUZU (GELİŞMİŞ METRİKLİ SÜRÜM) ---
+# Canlı piyasa durumlarından genel bir volatilite ve hacim durumu simüle ediyoruz
+volatilite_durumu = "Yüksek 🔥" if n_val > 65 or c_val > 65 else ("Düşük 💤" if n_val < 35 or c_val < 35 else "Normal 📊")
+hacim_durumu = "Güçlü 💰" if (n_val + c_val) / 2 > 55 else "Zayıf 📉"
+
+st.markdown(f"""
+<div style="background: rgba(30, 41, 59, 0.5); border: 1px dashed #334155; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+    <div style="display: flex; gap: 20px; margin-bottom: 12px; border-bottom: 1px solid rgba(51, 65, 85, 0.5); padding-bottom: 8px; flex-wrap: wrap;">
+        <span style="color: #64748B; font-size: 11px; font-weight: 700; text-transform: uppercase;">📊 Canlı Piyasa Dinamikleri:</span>
+        <span style="font-size: 11px; color: #94A3B8;">⚡ Volatilite (Oynaklık): <b style="color: #FFF;">{volatilite_durumu}</b></span>
+        <span style="font-size: 11px; color: #94A3B8;">💵 Piyasa Hacmi (Momentum): <b style="color: #FFF;">{hacim_durumu}</b></span>
+    </div>
     <span style="color: #64748B; font-size: 11px; font-weight: 700; display: block; margin-bottom: 6px;">💡 AI PSİKOLOJİ KILAVUZU:</span>
     <div style="display: flex; gap: 20px; flex-wrap: wrap; font-size: 11px; color: #94A3B8; line-height: 1.4;">
         <div>🔴 <b style="color: #EF4444;">Aşırı Korku (0-30):</b> Yatırımcılar panikle satıyor. Yapay zekanın bu aşamada üreteceği <b>BUY</b> sinyallerinin dipten dönüş yakalama şansı yüksektir.</div>
