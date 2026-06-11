@@ -176,15 +176,16 @@ def analiz_et_safe(market, min_hours, interval):
         min_required_len = 15 if is_forced else 50
         
         if len(X) > min_required_len:
-            # --- XGBoost Model Tanımlaması ---
+            # --- Hızlandırılmış XGBoost Model Tanımlaması ---
             model = xgb.XGBClassifier(
-                n_estimators=150,
+                n_estimators=80,         # 150 yerine 80 ağaç yeterlidir
                 max_depth=5,
                 learning_rate=0.05,
                 subsample=0.8,
                 colsample_bytree=0.8,
                 random_state=42,
-                eval_metric='logloss'
+                eval_metric='logloss',
+                n_jobs=-1                # SİHİRLİ DOKUNUŞ: Sunucunun tüm işlemci çekirdeklerini aynı anda kullanır
             )
             
             model.fit(X, y)
