@@ -299,7 +299,17 @@ with fng_cols[2]:
     </div>
     """, unsafe_allow_html=True)
 
-st.write("") # Küçük boşluk
+# --- PİYASA PSİKOLOJİSİ KULLANICI KILAVUZU (BİLGİ NOTU) ---
+st.markdown("""
+<div style="background: rgba(30, 41, 59, 0.5); border: 1px dashed #334155; padding: 12px; border-radius: 8px; margin-bottom: 20px;">
+    <span style="color: #64748B; font-size: 11px; font-weight: 700; display: block; margin-bottom: 6px;">💡 AI PSİKOLOJİ KILAVUZU:</span>
+    <div style="display: flex; gap: 20px; flex-wrap: wrap; font-size: 11px; color: #94A3B8; line-height: 1.4;">
+        <div>🔴 <b style="color: #EF4444;">Aşırı Korku (0-30):</b> Yatırımcılar panikle satıyor. Yapay zekanın bu aşamada üreteceği <b>BUY</b> sinyallerinin dipten dönüş yakalama şansı yüksektir.</div>
+        <div>⚪ <b style="color: #94A3B8;">Nötr (45-55):</b> Piyasa yönsüzdür. Teknik formasyonlar ve Doji sinyalleri daha stabil çalışır.</div>
+        <div>🟢 <b style="color: #34D399;">Aşırı Açgözlülük (75-100):</b> Piyasada köpük/fomo var. Tepe fiyattan terste kalmamak için <b>BUY</b> sinyallerine temkinli yaklaşılmalıdır.</div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 # --- TRADINGVIEW MODAL ALANI ---
 if st.session_state.chart_open:
