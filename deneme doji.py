@@ -397,14 +397,31 @@ if st.session_state.chart_open:
         st.rerun()
     st.markdown("---")
 
-# CANLI TARAMA BUTONU
+# CANLI TARAMA BUTONU VE İLERLEME ÇUBUĞU
 if st.button("🚀 {} Odası İçin Canlı AI Taraması Başlat".format(secilen_sayfa)):
-    with st.spinner("İlgili piyasaların geçmiş verileri indiriliyor..."):
-        yeni_sonuclar = {}
-        for m in aktif_list:
-            analiz = analiz_et_safe(m, global_min_hours, global_interval)
-            if analiz: yeni_sonuclar[m["symbol"]] = {"market": m, "result": analiz}
-        st.session_state.results = yeni_sonuclar
+    st.info("📡 Sistem başlatıldı, piyasa verileri çekiliyor...")
+    ilerleme_cubugu = st.progress(0)
+    durum_metni = st.empty()
+    
+    yeni_sonuclar = {}
+    toplam_varlik = len(aktif_list)
+    
+    for i, m in enumerate(aktif_list):
+        # Ekrana hangi varlığın tarandığını yaz
+        durum_metni.markdown(f"**🔍 Analiz Ediliyor:** {m['name']} ({i+1}/{toplam_varlik})")
+        
+        # Analizi çalıştır
+        analiz = analiz_et_safe(m, global_min_hours, global_interval)
+        
+        if analiz: 
+            yeni_sonuclar[m["symbol"]] = {"market": m, "result": analiz}
+            
+        # İlerleme çubuğunu güncelle
+        ilerleme_cubugu.progress((i + 1) / toplam_varlik)
+        
+    durum_metni.success("✅ Tüm piyasa taraması ve XGBoost modellemesi tamamlandı!")
+    st.session_state.results = yeni_sonuclar
+    st.rerun() # Sayfayı yenileyip sonuçları hemen ekrana basmak için
 
 # --- SİNYAL KARTLARININ EKRANA BASILMASI ---
 valid_signals = {k: v for k, v in st.session_state.results.items() if v["market"] in aktif_list}
