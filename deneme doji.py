@@ -84,6 +84,35 @@ def get_real_market_dynamics(symbols):
     except:
         return "Normal 📊", "#F59E0B", "Normal 📈"
 
+# --- PİYASA REJİMİ (HEATMAP) HESAPLAYICI ---
+def piyasa_rejimi_hesapla(symbol):
+    try:
+        df = yf.download(symbol, period="60d", interval="1d", progress=False)
+        if df.empty: return "Veri Yok", "#334155"
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+
+        # EMA ve RSI Hesaplama
+        df['EMA20'] = df['Close'].ewm(span=20, adjust=False).mean()
+        df['EMA50'] = df['Close'].ewm(span=50, adjust=False).mean()
+        delta = df['Close'].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+        rs = gain / (loss + 1e-10)
+        rsi = 100 - (100 / (1 + rs)).iloc[-1]
+
+        ema20 = df['EMA20'].iloc[-1]
+        ema50 = df['EMA50'].iloc[-1]
+
+        # Rejim Sınıflandırması
+        if ema20 > ema50 and rsi > 60: return "Güçlü Boğa 🚀", "#10B981" # Parlak Yeşil
+        elif ema20 > ema50: return "Boğa 🟢", "#059669" # Koyu Yeşil
+        elif ema20 < ema50 and rsi < 40: return "Güçlü Ayı 🩸", "#EF4444" # Parlak Kırmızı
+        elif ema20 < ema50: return "Ayı 🔴", "#B91C1C" # Koyu Kırmızı
+        else: return "Yatay ⚪", "#64748B" # Gri
+    except:
+        return "Bilinmiyor", "#334155"
+
 def buyuk_trend_kontrol(symbol):
     try:
         df_big = yf.download(symbol, period="60d", interval="4h", progress=False)
@@ -277,6 +306,22 @@ if secilen_sayfa == "🏠 Genel Dashboard":
         
     aktif_list = MARKETS
     st.markdown("""<div style="background:rgba(30,41,59,0.5); border:1px dashed #334155; padding:12px; border-radius:8px; margin-bottom:20px;"><div style="display:flex; gap:20px; flex-wrap:wrap; font-size:11px; color:#94A3B8; line-height:1.4;"><div>🔴 <b style="color:#EF4444;">Aşırı Korku (0-30):</b> BUY yönlü dönüş şansı yüksek.</div><div>⚪ <b style="color:#94A3B8;">Nötr (45-55):</b> Doji daha stabil çalışır.</div><div>🟢 <b style="color:#34D399;">Aşırı Açgözlülük (75-100):</b> BUY sinyallerine temkinli yaklaşılmalıdır.</div></div></div>""", unsafe_allow_html=True)
+    # --- 🗺️ CANLI PİYASA REJİMİ ISI HARİTASI ---
+    st.markdown("<h3 style='color: #F1F5F9; font-size: 16px; margin-top: 15px; margin-bottom: 10px;'>🗺️ Canlı Piyasa Rejimi (Heatmap)</h3>", unsafe_allow_html=True)
+
+    with st.spinner("Isı haritası verileri işleniyor..."):
+        heatmap_html = "<div style='display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 25px;'>"
+        for m in MARKETS:
+            rejim, renk = piyasa_rejimi_hesapla(m["symbol"])
+            heatmap_html += f"""
+            <div style='background: {renk}; padding: 12px; border-radius: 8px; text-align: center; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 4px 6px rgba(0,0,0,0.1);'>
+                <div style='color: rgba(255,255,255,0.9); font-size: 11px; font-weight: 700; margin-bottom: 4px;'>{m['name']}</div>
+                <div style='color: #FFF; font-size: 13px; font-weight: 800;'>{rejim}</div>
+            </div>
+            """
+        heatmap_html += "</div>"
+        st.markdown(heatmap_html, unsafe_allow_html=True)
+        
     st.subheader("🚀 Küresel Takip Listesi (Tüm Piyasalar)")
 
 elif secilen_sayfa == "🪙 Kripto Terminali":
