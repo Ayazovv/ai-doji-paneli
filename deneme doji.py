@@ -14,7 +14,6 @@ from datetime import datetime, timezone
 from sklearn.ensemble import RandomForestClassifier
 
 # --- SAYFA AYARLARI ---
-# Sol menüyü aktif etmek için collapsed olan durumu AUTO ya çektik
 st.set_page_config(page_title="AI Doji Terminali", layout="wide", initial_sidebar_state="auto")
 
 # --- GLOBAL PİYASA TANIMLARI ---
@@ -171,10 +170,11 @@ def analiz_et_safe(market, min_hours, interval):
     except:
         return None
 
-# --- STATE VE SİL ENJEKSİYONLARI ---
+# --- STATE TANIMLAMALARI ---
 if "results" not in st.session_state: st.session_state.results = {}
 if "chart_open" not in st.session_state: st.session_state.chart_open = None
 
+# Stil Tanımlamaları
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
@@ -196,7 +196,6 @@ secilen_sayfa = st.sidebar.radio(
     ["🏠 Genel Dashboard", "🪙 Kripto Terminali", "🇺🇸 NASDAQ Terminali", "👑 Emtia Terminali"]
 )
 
-# Ortak Slider ve Periyot Ayarları Sol Menünün Altına Şıkça Yerleşti
 st.sidebar.markdown("---")
 st.sidebar.subheader("🎛️ Küresel Filtreler")
 global_interval = st.sidebar.selectbox("⏳ Zaman Dilimi (Periyot)", ["1h", "4h", "1d"], index=0)
@@ -215,6 +214,12 @@ with st.spinner("Gerçek piyasa dinamikleri sorgulanıyor..."):
     c_val, c_status, c_color = get_crypto_fng()
     n_vol, n_vol_clr, n_hac = get_real_market_dynamics(["AAPL", "TSLA", "NVDA", "MSFT"])
     e_vol, e_vol_clr, e_hac = get_real_market_dynamics(["GC=F", "SI=F"])
+    
+    # 🎯 HATA DÜZELTMESİ: Kripto için eksik kalan renk ve durum değişkenleri buraya netçe bağlandı
+    c_vol = "Yüksek 🔥" if c_val > 65 else ("Düşük 💤" if c_val < 35 else "Normal 📊")
+    c_vol_clr = "#34D399" if c_val > 65 else ("#64748B" if c_val < 35 else "#F59E0B")
+    c_hac = "Güçlü 💰" if c_val > 55 else "Zayıf 📉"
+    
     n_bar_color = "#EF4444" if "Kapalı" in n_hac else ("#10B981" if "Güçlü" in n_hac else "#94A3B8")
     e_bar_color = "#EF4444" if "Kapalı" in e_hac else ("#10B981" if "Güçlü" in e_hac else "#94A3B8")
 
@@ -243,7 +248,7 @@ with fng_cols[2]:
 
 st.markdown("""<div style="background:rgba(30,41,59,0.5); border:1px dashed #334155; padding:12px; border-radius:8px; margin-bottom:20px;"><div style="display:flex; gap:20px; flex-wrap:wrap; font-size:11px; color:#94A3B8; line-height:1.4;"><div>🔴 <b style="color:#EF4444;">Aşırı Korku (0-30):</b> BUY yönlü dipten dönüş şansı yüksek.</div><div>⚪ <b style="color:#94A3B8;">Nötr (45-55):</b> Doji sinyalleri daha stabil çalışır.</div><div>🟢 <b style="color:#34D399;">Aşırı Açgözlülük (75-100):</b> Tepe fiyattan terste kalmamak için BUY sinyallerine temkinli yaklaşılmalıdır.</div></div></div>""", unsafe_allow_html=True)
 
-# --- TRADINGVIEW MODAL MOTORU (ORTAK GRRAFİK ALANI) ---
+# --- TRADINGVIEW MODAL MOTORU (ORTAK GRAFİK ALANI) ---
 if st.session_state.chart_open:
     c_market = st.session_state.chart_open
     st.markdown(f"### 📊 Canlı Grafik: {c_market['name']} ({c_market['tv']})")
@@ -256,7 +261,7 @@ if st.session_state.chart_open:
         st.rerun()
     st.markdown("---")
 
-# --- SOSYAL SAYFA LOJİKLERİ (SEKMELERE GÖRE FİLTRELEME) ---
+# --- SAYFA FİLTRELEME MANTIĞI ---
 if secilen_sayfa == "🏠 Genel Dashboard":
     aktif_list = MARKETS
     st.subheader("🚀 Küresel Takip Listesi (Tüm Piyasalar)")
