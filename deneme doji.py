@@ -27,7 +27,22 @@ MARKETS = [
     {"name": "Ethereum", "symbol": "ETH-USD", "tv": "BINANCE:ETHUSDT", "category": "Kripto", "color": "#6366F1"}
 ]
 
-# --- SAF PYTHON MATEMATİĞİ İLE İNDİKATÖR HESAPLAMA (KÜTÜPHANESİZ) ---
+# --- BÜYÜK TRENDİ KONTROL EDEN YARDIMCI FONKSİYON ---
+def buyuk_trend_kontrol(symbol):
+    try:
+        df_big = yf.download(symbol, period="60d", interval="4h", progress=False)
+        if df_big.empty: return "Yansız"
+        if isinstance(df_big.columns, pd.MultiIndex):
+            df_big.columns = df_big.columns.get_level_values(0)
+            
+        ema200 = df_big['Close'].ewm(span=200, adjust=False).mean().iloc[-1]
+        son_fiyat = df_big['Close'].iloc[-1]
+        
+        return "Boğa (Yukarı)" if son_fiyat > ema200 else "Ayı (Aşağı)"
+    except:
+        return "Yansız"
+
+# --- SAF PYTHON MATEMATİĞİ İLE İNDİKATÖR HESAPLAMA ---
 def analiz_et_safe(market, min_hours, interval):
     try:
         if interval == "15m": periyot = "1mo"
@@ -71,8 +86,8 @@ def analiz_et_safe(market, min_hours, interval):
         
         df = df.dropna()
         
-        # Hedef Tanımlama (4 mum sonrası)
-        df['Hedef'] = np.where(df['Close'].shift(-4) > df['Close'], 1, 0)
+        # 🎯 DÜZELTME: Hedef tanımlamayı (shift) dinamik olarak slider'dan gelen min_hours değerine bağladık!
+        df['Hedef'] = np.where(df['Close'].shift(-int(min_hours)) > df['Close'], 1, 0)
         özellikler = ['RSI', 'Price_to_EMA20', 'ATR', 'Upper_Shadow', 'Lower_Shadow', 'Volume_Shock']
         
         # Doji kontrolü (Canlı tarama için)
@@ -88,8 +103,9 @@ def analiz_et_safe(market, min_hours, interval):
         
         if gecen_mum < min_hours or gecen_mum > (24 / saat_katsayisi): return None
         
-        X = df[özellikler].iloc[:-4]
-        y = df['Hedef'].iloc[:-4]
+        # Tahmin aralığı kadar mumu eğitim setinden güvenle düşüyoruz
+        X = df[özellikler].iloc[:-int(min_hours)]
+        y = df['Hedef'].iloc[:-int(min_hours)]
         
         win_rate = 50
         toplam_sinyal = 0
@@ -99,7 +115,7 @@ def analiz_et_safe(market, min_hours, interval):
             model.fit(X, y)
             
             # --- BACKTEST MOTORU ---
-            doji_df = df[df['Doji'] == True].iloc[:-4]
+            doji_df = df[df['Doji'] == True].iloc[:-int(min_hours)]
             if not doji_df.empty:
                 X_doji = doji_df[özellikler]
                 y_doji = doji_df['Hedef']
@@ -125,6 +141,8 @@ def analiz_et_safe(market, min_hours, interval):
         elif rsi_val > 60: doji_type = "Gravestone"
         else: doji_type = "Standard"
         
+        big_trend = buyuk_trend_kontrol(market["symbol"])
+        
         return {
             "hoursAgo": gecen_mum,
             "signal": signal,
@@ -132,6 +150,7 @@ def analiz_et_safe(market, min_hours, interval):
             "confidence": guven_orani,
             "winRate": win_rate,
             "totalSignals": toplam_sinyal,
+            "bigTrend": big_trend,
             "price": float(df['Close'].iloc[-1]),
             "change": float(((df['Close'].iloc[-1] - df['Open'].iloc[-12]) / df['Open'].iloc[-12]) * 100),
             "dojiType": doji_type
@@ -250,10 +269,10 @@ for i, m in enumerate(MARKETS):
             st.rerun()
 
 st.session_state.interval = st.selectbox("⏳ Analiz Zaman Dilimi (Periyot)", ["15m", "1h", "4h", "1d"], index=1)
-st.session_state.min_hours = st.slider("🎯 Doji Sonrası Minimum Geçmesi Gereken Süre (Mum Sayısı)", 1, 12, st.session_state.min_hours)
+st.session_state.min_hours = st.slider("🎯 Doji Sonrası Geçen / AI Tahmin Süresi (Mum Sayısı)", 1, 12, st.session_state.min_hours)
 
 if st.button("🚀 Piyasaları Canlı Tara ve Analiz Et", key="scan_markets_main"):
-    with st.spinner("Canlı fiyat verileri çekiliyor ve yapay zeka eğitiliyor..."):
+    with st.spinner("Canlı fiyat verileri çekiliyor, büyük trend doğrulanıyor..."):
         yeni_sonuclar = {}
         for m in MARKETS:
             if m["symbol"] in st.session_state.selected_markets:
@@ -262,7 +281,7 @@ if st.button("🚀 Piyasaları Canlı Tara ve Analiz Et", key="scan_markets_main
                     yeni_sonuclar[m["symbol"]] = {"market": m, "result": analiz}
         st.session_state.results = yeni_sonuclar
 
-# SİNYAL KARTLARI
+# SİNYAL KART LİSTESİ
 if not st.session_state.results:
     st.markdown("""
     <div style="background: #0F172A; border: 1px solid #1E293B; border-radius: 12px; padding: 40px; text-align: center; margin-top: 20px;">
@@ -280,6 +299,14 @@ else:
         text_color = '#4ADE80' if r['change'] >= 0 else '#F87171'
         plus_sign = '+' if r['change'] >= 0 else ''
         
+        is_confluence = (is_buy and r["bigTrend"] == "Boğa (Yukarı)") or (not is_buy and r["bigTrend"] == "Ayı (Aşağı)")
+        
+        if is_confluence:
+            confluence_badge = '<span style="background: rgba(52, 211, 153, 0.2); border: 1px solid #34D399; color: #34D399; padding: 3px 10px; border-radius: 6px; font-weight: 800;">🔥 Trend Uyumlu</span>'
+        else:
+            confluence_badge = '<span style="background: rgba(239, 68, 68, 0.1); border: 1px solid #EF4444; color: #EF4444; padding: 3px 10px; border-radius: 6px; font-weight: 800;">⚠️ Trend Tersi Riskli</span>'
+        
+        # 🎯 DÜZELTME: Kart içerisindeki turuncu win-rate metnini kafa karıştırmayacak şekilde güncelledik
         st.markdown(f"""
         <div style="background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%); border: 1px solid #1E293B; border-left: 5px solid {border_color}; border-radius: 10px; padding: 15px; margin-bottom: 12px;">
             <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -287,12 +314,13 @@ else:
                     <strong style="color: #F1F5F9; font-size: 16px;">{m['name']}</strong>
                     <span style="background: #020817; border: 1px solid #334155; color: #64748B; font-size: 11px; padding: 2px 6px; border-radius: 4px; margin-left: 8px;">{m['category']}</span>
                     <div style="color: #94A3B8; font-size: 13px; margin-top: 4px;">
-                        ⏳ <b>Doji üzerinden geçen süre: {r['hoursAgo']} Mum</b> ({r['dojiType']} Doji)
+                        ⏳ <b>Doji üzerinden geçen süre: {r['hoursAgo']} Mum</b> ({r['dojiType']} Doji) • <span style="color: #CBD5E1;">Büyük Trend (4h): <b>{r['bigTrend']}</b></span>
                     </div>
-                    <div style="margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap;">
+                    <div style="margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
                         <span style="background: {badge_bg}; border: 1px solid {border_color}; color: {border_color}; padding: 3px 10px; border-radius: 6px; font-weight: 700;">{r['signal']}</span>
+                        {confluence_badge}
                         <span style="background: #020817; border: 1px solid #1E293B; color: #94A3B8; padding: 3px 10px; border-radius: 6px;">Tahmin Güveni: %{r['confidence']}</span>
-                        <span style="background: #1E293B; border: 1px solid #F59E0B; color: #F59E0B; padding: 3px 10px; border-radius: 6px; font-weight: 600;">🎯 Tarihsel Win-Rate: %{r['winRate']} ({r['totalSignals']} Sinyal)</span>
+                        <span style="background: #1E293B; border: 1px solid #F59E0B; color: #F59E0B; padding: 3px 10px; border-radius: 6px; font-weight: 600;">🎯 AI Tarihsel Win-Rate: %{r['winRate']} (Son {r['totalSignals']} geçmiş Doji modellemesinde)</span>
                         <span style="background: #020817; border: 1px solid #1E293B; color: #94A3B8; padding: 3px 10px; border-radius: 6px;">RSI: {r['rsi']}</span>
                     </div>
                 </div>
