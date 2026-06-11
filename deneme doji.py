@@ -126,24 +126,31 @@ def analiz_et_safe(market, min_hours, interval):
         df = df.dropna()
         df['Hedef'] = np.where(df['Close'].shift(-int(min_hours)) > df['Close'], 1, 0)
         özellikler = ['RSI', 'Price_to_EMA20', 'ATR', 'Upper_Shadow', 'Lower_Shadow', 'Volume_Shock']
+        
         doji_satirlari = df[df['Doji'] == True]
         if doji_satirlari.empty: return None
-        son_doji_zaman = doji_satirlari.index[-1].to_pydatetime().replace(timezone.utc)
+        
+        son_doji_zaman = doji_satirlari.index[-1].to_pydatetime().replace(tzinfo=timezone.utc)
         su_an = datetime.now(timezone.utc)
         gecen_saat = round((su_an - son_doji_zaman).total_seconds() / 3600, 1)
         saat_katsayisi = 4 if interval == "4h" else (24 if interval == "1d" else 1)
         gecen_mum = round(gecen_saat / saat_katsayisi, 1)
         
-        # Test modunda bu filtreyi gevşetmek için kaydı session_state üzerinden kontrol edeceğiz
-        if "force_past" in st.session_state and st.session_state.force_past:
-            pass
-        elif gecen_mum < min_hours or gecen_mum > (24 / saat_katsayisi): 
-            return None
+        # 🎯 GEÇMİŞİ ZORLAMA bypass lojiği tam bu noktada esnetildi
+        is_forced = "force_past" in st.session_state and st.session_state.force_past
+        
+        if not is_forced:
+            if gecen_mum < min_hours or gecen_mum > (24 / saat_katsayisi): 
+                return None
             
         X = df[özellikler].iloc[:-int(min_hours)]
         y = df['Hedef'].iloc[:-int(min_hours)]
         win_rate, toplam_sinyal = 50, 0
-        if len(X) > 50:
+        
+        # Test modunda veri seti küçük olsa bile algoritmanın çökmesini engelliyoruz
+        min_required_len = 15 if is_forced else 50
+        
+        if len(X) > min_required_len:
             model = RandomForestClassifier(n_estimators=60, max_depth=8, random_state=42)
             model.fit(X, y)
             doji_df = df[df['Doji'] == True].iloc[:-int(min_hours)]
@@ -160,12 +167,14 @@ def analiz_et_safe(market, min_hours, interval):
         else:
             tahmin_yon = 1 if df['RSI'].iloc[-1] < 50 else 0
             guven_orani = 55
+            
         signal = "BUY" if tahmin_yon == 1 else "SELL"
         rsi_val = int(df['RSI'].iloc[-1])
         if rsi_val < 40: doji_type = "Dragonfly"
         elif rsi_val > 60: doji_type = "Gravestone"
         else: doji_type = "Standard"
         big_trend = buyuk_trend_kontrol(market["symbol"])
+        
         return {
             "hoursAgo": gecen_mum, "signal": signal, "rsi": rsi_val, "confidence": guven_orani,
             "winRate": win_rate, "totalSignals": toplam_sinyal, "bigTrend": big_trend,
