@@ -177,16 +177,17 @@ def analiz_et_safe(market, min_hours, interval):
         min_required_len = 15 if is_forced else 50
         
         if len(X) > min_required_len:
-            # --- Hızlandırılmış XGBoost Model Tanımlaması ---
+            # --- Maksimum İsabet (High Accuracy & Anti-Overfit) Modeli ---
             model = xgb.XGBClassifier(
-                n_estimators=80,         # 150 yerine 80 ağaç yeterlidir
-                max_depth=5,
-                learning_rate=0.05,
-                subsample=0.8,
-                colsample_bytree=0.8,
+                n_estimators=300,        # Ağaç sayısını artırdık. Daha fazla varyasyonu inceler.
+                max_depth=4,             # Derinliği 5'ten 4'e DÜŞÜRDÜK! (Çok kritik: Modelin gürültüyü ezberlemesini engeller, sadece ana trendi yakalar).
+                learning_rate=0.01,      # Öğrenme hızını çok düşürdük. Model acele etmeden, sindire sindire öğrenir.
+                subsample=0.7,           # Her adımda geçmiş verinin rastgele %70'ine bakar (Piyasa manipülasyonlarına karşı körlük sağlar).
+                colsample_bytree=0.7,    # Her adımda indikatörlerin rastgele %70'ini kullanır (Sadece RSI'a veya hacme bağımlı kalmasını önler).
+                gamma=0.1,               # Yeni eklendi: Sadece gerçekten kârlı olacaksa yeni bir karar dalı oluşturur (Gereksiz işlemleri budar).
                 random_state=42,
                 eval_metric='logloss',
-                n_jobs=-1                # SİHİRLİ DOKUNUŞ: Sunucunun tüm işlemci çekirdeklerini aynı anda kullanır
+                n_jobs=-1                # Hız için sunucunun tüm çekirdekleri aktif.
             )
             
             model.fit(X, y)
