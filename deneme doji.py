@@ -128,7 +128,7 @@ def analiz_et_safe(market, min_hours, interval):
         özellikler = ['RSI', 'Price_to_EMA20', 'ATR', 'Upper_Shadow', 'Lower_Shadow', 'Volume_Shock']
         doji_satirlari = df[df['Doji'] == True]
         if doji_satirlari.empty: return None
-        son_doji_zaman = doji_satirlari.index[-1].to_pydatetime().replace(tzinfo=timezone.utc)
+        son_doji_zaman = doji_satirlari.index[-1].to_pydatetime().replace(timezone.utc)
         su_an = datetime.now(timezone.utc)
         gecen_saat = round((su_an - son_doji_zaman).total_seconds() / 3600, 1)
         saat_katsayisi = 4 if interval == "4h" else (24 if interval == "1d" else 1)
@@ -209,46 +209,102 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- ÜST PSİKOLOJİ BARLARI MOTORU ---
-with st.spinner("Gerçek piyasa dinamikleri sorgulanıyor..."):
-    c_val, c_status, c_color = get_crypto_fng()
-    n_vol, n_vol_clr, n_hac = get_real_market_dynamics(["AAPL", "TSLA", "NVDA", "MSFT"])
-    e_vol, e_vol_clr, e_hac = get_real_market_dynamics(["GC=F", "SI=F"])
+
+# --- 🎛️ SEKME BAZLI DİNAMİK BAR ENJEKSİYONU 🎛️ ---
+
+if secilen_sayfa == "🏠 Genel Dashboard":
+    with st.spinner("Tüm piyasa dinamikleri sorgulanıyor..."):
+        c_val, c_status, c_color = get_crypto_fng()
+        n_vol, n_vol_clr, n_hac = get_real_market_dynamics(["AAPL", "TSLA", "NVDA", "MSFT"])
+        e_vol, e_vol_clr, e_hac = get_real_market_dynamics(["GC=F", "SI=F"])
+        c_vol = "Yüksek 🔥" if c_val > 65 else ("Düşük 💤" if c_val < 35 else "Normal 📊")
+        c_vol_clr = "#34D399" if c_val > 65 else ("#64748B" if c_val < 35 else "#F59E0B")
+        c_hac = "Güçlü 💰" if c_val > 55 else "Zayıf 📉"
+        n_bar_color = "#EF4444" if "Kapalı" in n_hac else ("#10B981" if "Güçlü" in n_hac else "#94A3B8")
+        e_bar_color = "#EF4444" if "Kapalı" in e_hac else ("#10B981" if "Güçlü" in e_hac else "#94A3B8")
+
+    fng_cols = st.columns(3)
+    with fng_cols[0]:
+        st.markdown(f"""<div style="background:#0F172A; border:1px solid #1E293B; padding:12px; border-radius:8px; min-height:110px;">
+            <div style="font-size:11px; font-weight:700; color:#64748B; margin-bottom:6px;">🪙 KRİPTO PİYASASI (BTC/ETH)</div>
+            <div style="background:#1E293B; height:6px; border-radius:3px; overflow:hidden; margin-bottom:8px;"><div style="background:{c_color}; width:{c_val}%; height:6px;"></div></div>
+            <div style="color:{c_color}; font-weight:800; font-size:13px; text-align:right; margin-bottom:6px;">{c_status} ({c_val}/100)</div>
+            <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748B; border-top:1px solid rgba(51,65,85,0.3); padding-top:4px;"><span>⚡ Vol: <b style="color:{c_vol_clr};">{c_vol}</b></span><span>💵 Hacim: <b style="color:#FFF;">{c_hac}</b></span></div>
+        </div>""", unsafe_allow_html=True)
+    with fng_cols[1]:
+        st.markdown(f"""<div style="background:#0F172A; border:1px solid #1E293B; padding:12px; border-radius:8px; min-height:110px;">
+            <div style="font-size:11px; font-weight:700; color:#64748B; margin-bottom:6px;">🇺🇸 ABD BORSALARI (NASDAQ)</div>
+            <div style="background:#1E293B; height:6px; border-radius:3px; overflow:hidden; margin-bottom:8px;"><div style="background:#n_bar_color}; width:100%; height:6px;"></div></div>
+            <div style="color:{n_bar_color}; font-weight:800; font-size:13px; text-align:right; margin-bottom:6px;">{n_hac}</div>
+            <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748B; border-top:1px solid rgba(51,65,85,0.3); padding-top:4px;"><span>⚡ Vol: <b style="color:{n_vol_clr};">{n_vol}</b></span><span>💵 Durum: <b style="color:#FFF;">Hafta Sonu</b></span></div>
+        </div>""", unsafe_allow_html=True)
+    with fng_cols[2]:
+        st.markdown(f"""<div style="background:#0F172A; border:1px solid #1E293B; padding:12px; border-radius:8px; min-height:110px;">
+            <div style="font-size:11px; font-weight:700; color:#64748B; margin-bottom:6px;">👑 EMTİA PİYASASI (ALTIN/GÜMÜŞ)</div>
+            <div style="background:#1E293B; height:6px; border-radius:3px; overflow:hidden; margin-bottom:8px;"><div style="background:#e_bar_color}; width:100%; height:6px;"></div></div>
+            <div style="color:{e_bar_color}; font-weight:800; font-size:13px; text-align:right; margin-bottom:6px;">{e_hac}</div>
+            <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748B; border-top:1px solid rgba(51,65,85,0.3); padding-top:4px;"><span>⚡ Vol: <b style="color:{e_vol_clr};">{e_vol}</b></span><span>💵 Durum: <b style="color:#FFF;">Hafta Sonu</b></span></div>
+        </div>""", unsafe_allow_html=True)
+        
+    aktif_list = MARKETS
+    st.markdown("""<div style="background:rgba(30,41,59,0.5); border:1px dashed #334155; padding:12px; border-radius:8px; margin-bottom:20px;"><div style="display:flex; gap:20px; flex-wrap:wrap; font-size:11px; color:#94A3B8; line-height:1.4;"><div>🔴 <b style="color:#EF4444;">Aşırı Korku (0-30):</b> BUY yönlü dönüş şansı yüksek.</div><div>⚪ <b style="color:#94A3B8;">Nötr (45-55):</b> Doji daha stabil çalışır.</div><div>🟢 <b style="color:#34D399;">Aşırı Açgözlülük (75-100):</b> BUY sinyallerine temkinli yaklaşılmalıdır.</div></div></div>""", unsafe_allow_html=True)
+    st.subheader("🚀 Küresel Takip Listesi (Tüm Piyasalar)")
+
+elif secilen_sayfa == "🪙 Kripto Terminali":
+    with st.spinner("Kripto psikolojisi sorgulanıyor..."):
+        c_val, c_status, c_color = get_crypto_fng()
+        c_vol = "Yüksek 🔥" if c_val > 65 else ("Düşük 💤" if c_val < 35 else "Normal 📊")
+        c_vol_clr = "#34D399" if c_val > 65 else ("#64748B" if c_val < 35 else "#F59E0B")
+        c_hac = "Güçlü 💰" if c_val > 55 else "Zayıf 📉"
+        
+    st.markdown(f"""<div style="background:#0F172A; border:1px solid #1E293B; padding:15px; border-radius:8px; margin-bottom:20px;">
+        <div style="font-size:12px; font-weight:700; color:#64748B; margin-bottom:6px;">🪙 CANLI KRİPTO DUYARLILIĞI VE ANALİZİ (BTC/ETH)</div>
+        <div style="background:#1E293B; height:8px; border-radius:4px; overflow:hidden; margin-bottom:10px;"><div style="background:{c_color}; width:{c_val}%; height:8px;"></div></div>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="font-size:12px; color:#94A3B8;">⚡ Volatilite: <b style="color:{c_vol_clr};">{c_vol}</b> • 💵 Gerçek Hacim: <b style="color:#FFF;">{c_hac}</b></div>
+            <div style="color:{c_color}; font-weight:800; font-size:15px;">{c_status} ({c_val}/100)</div>
+        </div>
+    </div>""", unsafe_allow_html=True)
     
-    # 🎯 HATA DÜZELTMESİ: Kripto için eksik kalan renk ve durum değişkenleri buraya netçe bağlandı
-    c_vol = "Yüksek 🔥" if c_val > 65 else ("Düşük 💤" if c_val < 35 else "Normal 📊")
-    c_vol_clr = "#34D399" if c_val > 65 else ("#64748B" if c_val < 35 else "#F59E0B")
-    c_hac = "Güçlü 💰" if c_val > 55 else "Zayıf 📉"
+    aktif_list = [m for m in MARKETS if m["category"] == "Kripto"]
+    st.subheader("🪙 Kripto Para Odası")
+
+elif secilen_sayfa == "🇺🇸 NASDAQ Terminali":
+    with st.spinner("NASDAQ dinamikleri hesaplanıyor..."):
+        n_vol, n_vol_clr, n_hac = get_real_market_dynamics(["AAPL", "TSLA", "NVDA", "MSFT"])
+        n_bar_color = "#EF4444" if "Kapalı" in n_hac else ("#10B981" if "Güçlü" in n_hac else "#94A3B8")
+        
+    st.markdown(f"""<div style="background:#0F172A; border:1px solid #1E293B; padding:15px; border-radius:8px; margin-bottom:20px;">
+        <div style="font-size:12px; font-weight:700; color:#64748B; margin-bottom:6px;">🇺🇸 ABD TEKNOLOJİ BORSASI DİNAMİKLERİ (NASDAQ)</div>
+        <div style="background:#1E293B; height:8px; border-radius:4px; overflow:hidden; margin-bottom:10px;"><div style="background:{n_bar_color}; width:100%; height:8px;"></div></div>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="font-size:12px; color:#94A3B8;">⚡ Volatilite ($ATR$ Oranı): <b style="color:{n_vol_clr};">{n_vol}</b> • 💵 Durum: <b style="color:#FFF;">Hafta Sonu Kapanışı</b></div>
+            <div style="color:{n_bar_color}; font-weight:800; font-size:15px;">{n_hac}</div>
+        </div>
+    </div>""", unsafe_allow_html=True)
     
-    n_bar_color = "#EF4444" if "Kapalı" in n_hac else ("#10B981" if "Güçlü" in n_hac else "#94A3B8")
-    e_bar_color = "#EF4444" if "Kapalı" in e_hac else ("#10B981" if "Güçlü" in e_hac else "#94A3B8")
+    aktif_list = [m for m in MARKETS if m["category"] == "NASDAQ"]
+    st.subheader("🇺🇸 NASDAQ Hisse Senedi Odası")
 
-fng_cols = st.columns(3)
-with fng_cols[0]:
-    st.markdown(f"""<div style="background:#0F172A; border:1px solid #1E293B; padding:12px; border-radius:8px; min-height:110px;">
-        <div style="font-size:11px; font-weight:700; color:#64748B; margin-bottom:6px;">🪙 KRİPTO PİYASASI (BTC/ETH)</div>
-        <div style="background:#1E293B; height:6px; border-radius:3px; overflow:hidden; margin-bottom:8px;"><div style="background:{c_color}; width:{c_val}%; height:6px;"></div></div>
-        <div style="color:{c_color}; font-weight:800; font-size:13px; text-align:right; margin-bottom:6px;">{c_status} ({c_val}/100)</div>
-        <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748B; border-top:1px solid rgba(51,65,85,0.3); padding-top:4px;"><span>⚡ Vol: <b style="color:{c_vol_clr};">{c_vol}</b></span><span>💵 Hacim: <b style="color:#FFF;">{c_hac}</b></span></div>
+elif secilen_sayfa == "👑 Emtia Terminali":
+    with st.spinner("Emtia verileri analiz ediliyor..."):
+        e_vol, e_vol_clr, e_hac = get_real_market_dynamics(["GC=F", "SI=F"])
+        e_bar_color = "#EF4444" if "Kapalı" in e_hac else ("#10B981" if "Güçlü" in e_hac else "#94A3B8")
+        
+    st.markdown(f"""<div style="background:#0F172A; border:1px solid #1E293B; padding:15px; border-radius:8px; margin-bottom:20px;">
+        <div style="font-size:12px; font-weight:700; color:#64748B; margin-bottom:6px;">👑 DEĞERLİ METAL PİYASA PSİKOLOJİSİ (ALTIN/GÜMÜŞ)</div>
+        <div style="background:#1E293B; height:8px; border-radius:4px; overflow:hidden; margin-bottom:10px;"><div style="background:{e_bar_color}; width:100%; height:8px;"></div></div>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="font-size:12px; color:#94A3B8;">⚡ Volatilite ($ATR$): <b style="color:{e_vol_clr};">{e_vol}</b> • 💵 Durum: <b style="color:#FFF;">Hafta Sonu Kapanışı</b></div>
+            <div style="color:{e_bar_color}; font-weight:800; font-size:15px;">{e_hac}</div>
+        </div>
     </div>""", unsafe_allow_html=True)
-with fng_cols[1]:
-    st.markdown(f"""<div style="background:#0F172A; border:1px solid #1E293B; padding:12px; border-radius:8px; min-height:110px;">
-        <div style="font-size:11px; font-weight:700; color:#64748B; margin-bottom:6px;">🇺🇸 ABD BORSALARI (NASDAQ)</div>
-        <div style="background:#1E293B; height:6px; border-radius:3px; overflow:hidden; margin-bottom:8px;"><div style="background:{n_bar_color}; width:100%; height:6px;"></div></div>
-        <div style="color:{n_bar_color}; font-weight:800; font-size:13px; text-align:right; margin-bottom:6px;">{n_hac}</div>
-        <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748B; border-top:1px solid rgba(51,65,85,0.3); padding-top:4px;"><span>⚡ Vol: <b style="color:{n_vol_clr};">{n_vol}</b></span><span>💵 Durum: <b style="color:#FFF;">Hafta Sonu</b></span></div>
-    </div>""", unsafe_allow_html=True)
-with fng_cols[2]:
-    st.markdown(f"""<div style="background:#0F172A; border:1px solid #1E293B; padding:12px; border-radius:8px; min-height:110px;">
-        <div style="font-size:11px; font-weight:700; color:#64748B; margin-bottom:6px;">👑 EMTİA PİYASASI (ALTIN/GÜMÜŞ)</div>
-        <div style="background:#1E293B; height:6px; border-radius:3px; overflow:hidden; margin-bottom:8px;"><div style="background:{e_bar_color}; width:100%; height:6px;"></div></div>
-        <div style="color:{e_bar_color}; font-weight:800; font-size:13px; text-align:right; margin-bottom:6px;">{e_hac}</div>
-        <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748B; border-top:1px solid rgba(51,65,85,0.3); padding-top:4px;"><span>⚡ Vol: <b style="color:{e_vol_clr};">{e_vol}</b></span><span>💵 Durum: <b style="color:#FFF;">Hafta Sonu</b></span></div>
-    </div>""", unsafe_allow_html=True)
+    
+    aktif_list = [m for m in MARKETS if m["category"] == "Emtia"]
+    st.subheader("👑 Emtia Vadeli İşlem Odası")
 
-st.markdown("""<div style="background:rgba(30,41,59,0.5); border:1px dashed #334155; padding:12px; border-radius:8px; margin-bottom:20px;"><div style="display:flex; gap:20px; flex-wrap:wrap; font-size:11px; color:#94A3B8; line-height:1.4;"><div>🔴 <b style="color:#EF4444;">Aşırı Korku (0-30):</b> BUY yönlü dipten dönüş şansı yüksek.</div><div>⚪ <b style="color:#94A3B8;">Nötr (45-55):</b> Doji sinyalleri daha stabil çalışır.</div><div>🟢 <b style="color:#34D399;">Aşırı Açgözlülük (75-100):</b> Tepe fiyattan terste kalmamak için BUY sinyallerine temkinli yaklaşılmalıdır.</div></div></div>""", unsafe_allow_html=True)
 
-# --- TRADINGVIEW MODAL MOTORU (ORTAK GRAFİK ALANI) ---
+# --- TRADINGVIEW MODAL MOTORU ---
 if st.session_state.chart_open:
     c_market = st.session_state.chart_open
     st.markdown(f"### 📊 Canlı Grafik: {c_market['name']} ({c_market['tv']})")
@@ -261,23 +317,9 @@ if st.session_state.chart_open:
         st.rerun()
     st.markdown("---")
 
-# --- SAYFA FİLTRELEME MANTIĞI ---
-if secilen_sayfa == "🏠 Genel Dashboard":
-    aktif_list = MARKETS
-    st.subheader("🚀 Küresel Takip Listesi (Tüm Piyasalar)")
-elif secilen_sayfa == "🪙 Kripto Terminali":
-    aktif_list = [m for m in MARKETS if m["category"] == "Kripto"]
-    st.subheader("🪙 Sadece Kripto Sinyalleri Taranıyor")
-elif secilen_sayfa == "🇺🇸 NASDAQ Terminali":
-    aktif_list = [m for m in MARKETS if m["category"] == "NASDAQ"]
-    st.subheader("🇺🇸 Sadece Amerikan Hisse Senedi Sinyalleri Taranıyor")
-elif secilen_sayfa == "👑 Emtia Terminali":
-    aktif_list = [m for m in MARKETS if m["category"] == "Emtia"]
-    st.subheader("👑 Sadece Değerli Metal Sinyalleri Taranıyor")
-
 # CANLI TARAMA BUTONU
 if st.button(f"🚀 {secilen_sayfa} İçin Canlı AI Taraması Başlat"):
-    with st.spinner("İlgili piyasaların geçmiş verileri indiriliyor ve yapay zeka eğitiliyor..."):
+    with st.spinner("İlgili piyasaların geçmiş verileri indiriliyor..."):
         yeni_sonuclar = {}
         for m in aktif_list:
             analiz = analiz_et_safe(m, global_min_hours, global_interval)
