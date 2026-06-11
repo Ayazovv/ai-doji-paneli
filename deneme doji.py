@@ -47,49 +47,64 @@ def get_crypto_fng():
     except:
         return 50, "Nötr 😐", "#94A3B8"
 
-# --- 2. GELİŞMİŞ MATEMATİKSEL PİYASA PSİKOLOJİSİ SİMÜLATÖRÜ (NASDAQ & EMTİA İÇİN) ---
-def simulate_market_fng(symbols):
+# --- GERÇEK VERİLERLE VOLATİLİTE VE HACİM HESAPLAYICI ---
+def get_real_market_dynamics(symbols):
     try:
-        # Endeks mantığı kurmak için verilen sembollerin günlük rsi ve trend durumlarını tarıyoruz
-        rsi_list = []
-        trend_list = []
+        vol_results = []
+        vol_ratios = []
+        vol_counts = 0
         
         for sym in symbols:
-            df = yf.download(sym, period="60d", interval="1d", progress=False)
-            if df.empty: continue
+            # Son 20 günlük veriyi çekiyoruz
+            df = yf.download(sym, period="30d", interval="1d", progress=False)
+            if df.empty or len(df) < 20: continue
             if isinstance(df.columns, pd.MultiIndex):
                 df.columns = df.columns.get_level_values(0)
                 
-            # RSI 14 Günlük
-            delta = df['Close'].diff()
-            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-            rs = gain / (loss + 1e-10)
-            rsi = (100 - (100 / (1 + rs))).iloc[-1]
-            rsi_list.append(rsi)
-            
-            # Fiyatın 20 günlük ortalamaya göre durumu (Trend)
-            sma20 = df['Close'].rolling(window=20).mean().iloc[-1]
+            # 1. GERÇEK VOLATİLİTE (ATR / Fiyat Oranı)
+            high_low = df['High'] - df['Low']
+            high_close = abs(df['High'] - df['Close'].shift())
+            low_close = abs(df['Low'] - df['Close'].shift())
+            true_range = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+            atr20 = true_range.rolling(20).mean().iloc[-1]
             son_fiyat = df['Close'].iloc[-1]
-            trend_list.append(1 if son_fiyat > sma20 else 0)
             
-        if not rsi_list: return 50, "Nötr 😐", "#94A3B8"
+            # Volatilite yüzdesi (Fiyata göre oynaklık derecesi)
+            vol_ratio = (atr20 / son_fiyat) * 100
+            vol_ratios.append(vol_ratio)
+            
+            # 2. GERÇEK HACİM ŞOKU
+            # Son 3 günün hacim ortalaması / Son 20 günün hacim ortalaması
+            if 'Volume' in df.columns and df['Volume'].iloc[-1] > 0:
+                son_hacim = df['Volume'].rolling(3).mean().iloc[-1]
+                ort_hacim = df['Volume'].rolling(20).mean().iloc[-1]
+                hacim_soku = son_hacim / (ort_hacim + 1e-10)
+                vol_results.append(hacim_soku)
+                vol_counts += 1
+                
+        # Varsayılan değerler (Piyasa kapalıysa)
+        final_vol = "Düşük 💤"
+        final_vol_clr = "#64748B"
+        final_hac = "Piyasa Kapalı 🔒"
         
-        # Ortalama bir psikoloji skoru üretiyoruz (RSI ve Trend ağırlıklı)
-        avg_rsi = sum(rsi_list) / len(rsi_list)
-        avg_trend = sum(trend_list) / len(trend_list)
-        
-        # Skoru 0-100 arasına kalibre ediyoruz
-        final_score = int((avg_rsi * 0.7) + (avg_trend * 100 * 0.3))
-        final_score = max(5, min(95, final_score)) # Sınırları koru
-        
-        if final_score < 30: return final_score, "Aşırı Korku 😱", "#EF4444"
-        elif final_score < 45: return final_score, "Korku 😨", "#F97316"
-        elif final_score < 55: return final_score, "Nötr 😐", "#94A3B8"
-        elif final_score < 75: return final_score, "Açgözlülük 🤑", "#10B981"
-        else: return final_score, "Aşırı Açgözlülük 🚀", "#34D399"
+        # Volatilite Sınıflandırması (Kripto hariç hisse/emtia ortalaması için %1.5 üzeri yüksektir)
+        if vol_ratios:
+            avg_vol_ratio = sum(vol_ratios) / len(vol_ratios)
+            if avg_vol_ratio > 2.0:
+                final_vol, final_vol_clr = "Yüksek 🔥", "#34D399"
+            elif avg_vol_ratio > 1.0:
+                final_vol, final_vol_clr = "Normal 📊", "#F59E0B"
+                
+        # Hacim Sınıflandırması
+        if vol_counts > 0 and sum(vol_results) > 0:
+            avg_hacim_soku = sum(vol_results) / vol_counts
+            if avg_hacim_soku > 1.1: final_hac = "Güçlü 💰"
+            elif avg_hacim_soku > 0.4: final_hac = "Normal 📈"
+            else: final_hac = "Zayıf 📉"
+            
+        return final_vol, final_vol_clr, final_hac
     except:
-        return 50, "Nötr 😐", "#94A3B8"
+        return "Normal 📊", "#F59E0B", "Normal 📈"
 
 # --- BÜYÜK TRENDİ KONTROL EDEN YARDIMCI FONKSİYON ---
 def buyuk_trend_kontrol(symbol):
@@ -257,24 +272,18 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 🚀 3 FARKLI PİYASA PSİKOLOJİSİ VE DİNAMİKLERİ ALANI ---
-with st.spinner("Piyasa psikolojileri canlı analiz ediliyor..."):
+# --- 🚀 GERÇEK VERİ TABANLI 3 FARKLI PİYASA DİNAMİKLERİ ALANI ---
+with st.spinner("Gerçek piyasa hacimleri ve oynaklıkları hesaplanıyor..."):
     c_val, c_status, c_color = get_crypto_fng()
-    n_val, n_status, n_color = simulate_market_fng(["AAPL", "TSLA", "NVDA", "MSFT"])
-    e_val, e_status, e_color = simulate_market_fng(["GC=F", "SI=F"])
-
-# Her piyasanın kendi dinamiklerini ayrı ayrı hesaplıyoruz
-c_vol = "Yüksek 🔥" if c_val > 65 else ("Düşük 💤" if c_val < 35 else "Normal 📊")
-c_vol_clr = "#34D399" if c_val > 65 else ("#64748B" if c_val < 35 else "#F59E0B")
-c_hac = "Güçlü 💰" if c_val > 55 else "Zayıf 📉"
-
-n_vol = "Yüksek 🔥" if n_val > 65 else ("Düşük 💤" if n_val < 35 else "Normal 📊")
-n_vol_clr = "#34D399" if n_val > 65 else ("#64748B" if n_val < 35 else "#F59E0B")
-n_hac = "Güçlü 💰" if n_val > 55 else "Zayıf 📉"
-
-e_vol = "Yüksek 🔥" if e_val > 65 else ("Düşük 💤" if e_val < 35 else "Normal 📊")
-e_vol_clr = "#34D399" if e_val > 65 else ("#64748B" if e_val < 35 else "#F59E0B")
-e_hac = "Güçlü 💰" if e_val > 55 else "Zayıf 📉"
+    
+    # Kripto için ham hacim eşitlemesi
+    c_vol = "Yüksek 🔥" if c_val > 65 else ("Düşük 💤" if c_val < 35 else "Normal 📊")
+    c_vol_clr = "#34D399" if c_val > 65 else ("#64748B" if c_val < 35 else "#F59E0B")
+    c_hac = "Güçlü 💰" if c_val > 55 else "Zayıf 📉"
+    
+    # NASDAQ ve Emtia için arka plandaki ham matematiksel verileri çağırıyoruz 👇
+    n_vol, n_vol_clr, n_hac = get_real_market_dynamics(["AAPL", "TSLA", "NVDA", "MSFT"])
+    e_vol, e_vol_clr, e_hac = get_real_market_dynamics(["GC=F", "SI=F"])
 
 fng_cols = st.columns(3)
 
@@ -285,7 +294,7 @@ with fng_cols[0]:
         <div style="background: #1E293B; height: 6px; border-radius: 3px; overflow: hidden; margin-bottom: 8px;">
             <div style="background: {c_color}; width: {c_val}%; height: 6px;"></div>
         </div>
-        <div style="color: {c_color}; font-weight: 800; font-size: 13px; text-align: right; margin-bottom: 6px;">{c_status} ({c_val}/100)</div>
+        <div style="color: {c_color}; font-weight: 800; font-size: 13px; text-align: right; margin-bottom: 6px;">{c_status}</div>
         <div style="display: flex; justify-content: space-between; font-size: 10px; color: #64748B; border-top: 1px solid rgba(51,65,85,0.3); padding-top: 4px;">
             <span>⚡ Vol: <b style="color:{c_vol_clr};">{c_vol}</b></span>
             <span>💵 Hacim: <b style="color:#FFF;">{c_hac}</b></span>
@@ -300,7 +309,7 @@ with fng_cols[1]:
         <div style="background: #1E293B; height: 6px; border-radius: 3px; overflow: hidden; margin-bottom: 8px;">
             <div style="background: {n_color}; width: {n_val}%; height: 6px;"></div>
         </div>
-        <div style="color: {n_color}; font-weight: 800; font-size: 13px; text-align: right; margin-bottom: 6px;">{n_status} ({n_val}/100)</div>
+        <div style="color: {n_color}; font-weight: 800; font-size: 13px; text-align: right; margin-bottom: 6px;">{n_status}</div>
         <div style="display: flex; justify-content: space-between; font-size: 10px; color: #64748B; border-top: 1px solid rgba(51,65,85,0.3); padding-top: 4px;">
             <span>⚡ Vol: <b style="color:{n_vol_clr};">{n_vol}</b></span>
             <span>💵 Hacim: <b style="color:#FFF;">{n_hac}</b></span>
@@ -315,7 +324,7 @@ with fng_cols[2]:
         <div style="background: #1E293B; height: 6px; border-radius: 3px; overflow: hidden; margin-bottom: 8px;">
             <div style="background: {e_color}; width: {e_val}%; height: 6px;"></div>
         </div>
-        <div style="color: {e_color}; font-weight: 800; font-size: 13px; text-align: right; margin-bottom: 6px;">{e_status} ({e_val}/100)</div>
+        <div style="color: {e_color}; font-weight: 800; font-size: 13px; text-align: right; margin-bottom: 6px;">{e_status}</div>
         <div style="display: flex; justify-content: space-between; font-size: 10px; color: #64748B; border-top: 1px solid rgba(51,65,85,0.3); padding-top: 4px;">
             <span>⚡ Vol: <b style="color:{e_vol_clr};">{e_vol}</b></span>
             <span>💵 Hacim: <b style="color:#FFF;">{e_hac}</b></span>
