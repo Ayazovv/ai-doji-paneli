@@ -234,14 +234,14 @@ if secilen_sayfa == "🏠 Genel Dashboard":
     with fng_cols[1]:
         st.markdown(f"""<div style="background:#0F172A; border:1px solid #1E293B; padding:12px; border-radius:8px; min-height:110px;">
             <div style="font-size:11px; font-weight:700; color:#64748B; margin-bottom:6px;">🇺🇸 ABD BORSALARI (NASDAQ)</div>
-            <div style="background:#1E293B; height:6px; border-radius:3px; overflow:hidden; margin-bottom:8px;"><div style="background:#n_bar_color}; width:100%; height:6px;"></div></div>
+            <div style="background:#1E293B; height:6px; border-radius:3px; overflow:hidden; margin-bottom:8px;"><div style="background:{n_bar_color}; width:100%; height:6px;"></div></div>
             <div style="color:{n_bar_color}; font-weight:800; font-size:13px; text-align:right; margin-bottom:6px;">{n_hac}</div>
             <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748B; border-top:1px solid rgba(51,65,85,0.3); padding-top:4px;"><span>⚡ Vol: <b style="color:{n_vol_clr};">{n_vol}</b></span><span>💵 Durum: <b style="color:#FFF;">Hafta Sonu</b></span></div>
         </div>""", unsafe_allow_html=True)
     with fng_cols[2]:
         st.markdown(f"""<div style="background:#0F172A; border:1px solid #1E293B; padding:12px; border-radius:8px; min-height:110px;">
             <div style="font-size:11px; font-weight:700; color:#64748B; margin-bottom:6px;">👑 EMTİA PİYASASI (ALTIN/GÜMÜŞ)</div>
-            <div style="background:#1E293B; height:6px; border-radius:3px; overflow:hidden; margin-bottom:8px;"><div style="background:#e_bar_color}; width:100%; height:6px;"></div></div>
+            <div style="background:#1E293B; height:6px; border-radius:3px; overflow:hidden; margin-bottom:8px;"><div style="background:{e_bar_color}; width:100%; height:6px;"></div></div>
             <div style="color:{e_bar_color}; font-weight:800; font-size:13px; text-align:right; margin-bottom:6px;">{e_hac}</div>
             <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748B; border-top:1px solid rgba(51,65,85,0.3); padding-top:4px;"><span>⚡ Vol: <b style="color:{e_vol_clr};">{e_vol}</b></span><span>💵 Durum: <b style="color:#FFF;">Hafta Sonu</b></span></div>
         </div>""", unsafe_allow_html=True)
