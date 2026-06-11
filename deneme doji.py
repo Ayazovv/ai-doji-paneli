@@ -257,45 +257,69 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 🚀 3 FARKLI PİYASA PSİKOLOJİSİ ALANI (SAYFA BAŞINDA) ---
+# --- 🚀 3 FARKLI PİYASA PSİKOLOJİSİ VE DİNAMİKLERİ ALANI ---
 with st.spinner("Piyasa psikolojileri canlı analiz ediliyor..."):
-    # Verileri hazırlıyoruz
     c_val, c_status, c_color = get_crypto_fng()
     n_val, n_status, n_color = simulate_market_fng(["AAPL", "TSLA", "NVDA", "MSFT"])
     e_val, e_status, e_color = simulate_market_fng(["GC=F", "SI=F"])
+
+# Her piyasanın kendi dinamiklerini ayrı ayrı hesaplıyoruz
+c_vol = "Yüksek 🔥" if c_val > 65 else ("Düşük 💤" if c_val < 35 else "Normal 📊")
+c_vol_clr = "#34D399" if c_val > 65 else ("#64748B" if c_val < 35 else "#F59E0B")
+c_hac = "Güçlü 💰" if c_val > 55 else "Zayıf 📉"
+
+n_vol = "Yüksek 🔥" if n_val > 65 else ("Düşük 💤" if n_val < 35 else "Normal 📊")
+n_vol_clr = "#34D399" if n_val > 65 else ("#64748B" if n_val < 35 else "#F59E0B")
+n_hac = "Güçlü 💰" if n_val > 55 else "Zayıf 📉"
+
+e_vol = "Yüksek 🔥" if e_val > 65 else ("Düşük 💤" if e_val < 35 else "Normal 📊")
+e_vol_clr = "#34D399" if e_val > 65 else ("#64748B" if e_val < 35 else "#F59E0B")
+e_hac = "Güçlü 💰" if e_val > 55 else "Zayıf 📉"
 
 fng_cols = st.columns(3)
 
 with fng_cols[0]:
     st.markdown(f"""
-    <div style="background: #0F172A; border: 1px solid #1E293B; padding: 12px; border-radius: 8px; min-height: 85px;">
+    <div style="background: #0F172A; border: 1px solid #1E293B; padding: 12px; border-radius: 8px; min-height: 110px;">
         <div style="font-size: 11px; font-weight: 700; color: #64748B; margin-bottom: 6px;">🪙 KRİPTO PİYASASI (BTC/ETH)</div>
         <div style="background: #1E293B; height: 6px; border-radius: 3px; overflow: hidden; margin-bottom: 8px;">
             <div style="background: {c_color}; width: {c_val}%; height: 6px;"></div>
         </div>
-        <div style="color: {c_color}; font-weight: 800; font-size: 13px; text-align: right;">{c_status} ({c_val}/100)</div>
+        <div style="color: {c_color}; font-weight: 800; font-size: 13px; text-align: right; margin-bottom: 6px;">{c_status} ({c_val}/100)</div>
+        <div style="display: flex; justify-content: space-between; font-size: 10px; color: #64748B; border-top: 1px solid rgba(51,65,85,0.3); padding-top: 4px;">
+            <span>⚡ Vol: <b style="color:{c_vol_clr};">{c_vol}</b></span>
+            <span>💵 Hacim: <b style="color:#FFF;">{c_hac}</b></span>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
 with fng_cols[1]:
     st.markdown(f"""
-    <div style="background: #0F172A; border: 1px solid #1E293B; padding: 12px; border-radius: 8px; min-height: 85px;">
+    <div style="background: #0F172A; border: 1px solid #1E293B; padding: 12px; border-radius: 8px; min-height: 110px;">
         <div style="font-size: 11px; font-weight: 700; color: #64748B; margin-bottom: 6px;">🇺🇸 ABD BORSALARI (NASDAQ)</div>
         <div style="background: #1E293B; height: 6px; border-radius: 3px; overflow: hidden; margin-bottom: 8px;">
             <div style="background: {n_color}; width: {n_val}%; height: 6px;"></div>
         </div>
-        <div style="color: {n_color}; font-weight: 800; font-size: 13px; text-align: right;">{n_status} ({n_val}/100)</div>
+        <div style="color: {n_color}; font-weight: 800; font-size: 13px; text-align: right; margin-bottom: 6px;">{n_status} ({n_val}/100)</div>
+        <div style="display: flex; justify-content: space-between; font-size: 10px; color: #64748B; border-top: 1px solid rgba(51,65,85,0.3); padding-top: 4px;">
+            <span>⚡ Vol: <b style="color:{n_vol_clr};">{n_vol}</b></span>
+            <span>💵 Hacim: <b style="color:#FFF;">{n_hac}</b></span>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
 with fng_cols[2]:
     st.markdown(f"""
-    <div style="background: #0F172A; border: 1px solid #1E293B; padding: 12px; border-radius: 8px; min-height: 85px;">
+    <div style="background: #0F172A; border: 1px solid #1E293B; padding: 12px; border-radius: 8px; min-height: 110px;">
         <div style="font-size: 11px; font-weight: 700; color: #64748B; margin-bottom: 6px;">👑 EMTİA PİYASASI (ALTIN/GÜMÜŞ)</div>
         <div style="background: #1E293B; height: 6px; border-radius: 3px; overflow: hidden; margin-bottom: 8px;">
             <div style="background: {e_color}; width: {e_val}%; height: 6px;"></div>
         </div>
-        <div style="color: {e_color}; font-weight: 800; font-size: 13px; text-align: right;">{e_status} ({e_val}/100)</div>
+        <div style="color: {e_color}; font-weight: 800; font-size: 13px; text-align: right; margin-bottom: 6px;">{e_status} ({e_val}/100)</div>
+        <div style="display: flex; justify-content: space-between; font-size: 10px; color: #64748B; border-top: 1px solid rgba(51,65,85,0.3); padding-top: 4px;">
+            <span>⚡ Vol: <b style="color:{e_vol_clr};">{e_vol}</b></span>
+            <span>💵 Hacim: <b style="color:#FFF;">{e_hac}</b></span>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
