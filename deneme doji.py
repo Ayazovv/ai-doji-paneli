@@ -9,7 +9,7 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
-import requests  # 👈 Canlı psikoloji verisini çekmek için eklendi
+import requests
 from datetime import datetime, timezone
 from sklearn.ensemble import RandomForestClassifier
 
@@ -28,14 +28,13 @@ MARKETS = [
     {"name": "Ethereum", "symbol": "ETH-USD", "tv": "BINANCE:ETHUSDT", "category": "Kripto", "color": "#6366F1"}
 ]
 
-# --- CANLI KORKU VE AÇGÖZLÜLÜK ENDEKSİ ÇEKİCİ ---
-def get_fear_and_greed():
+# --- 1. KRİPTO PSİKOLOJİSİ ÇEKİCİ ---
+def get_crypto_fng():
     try:
         response = requests.get("https://api.alternative.me/fng/", timeout=5).json()
         value = int(response['data'][0]['value'])
         classification = response['data'][0]['value_classification']
         
-        # Türkçe çeviri ve renk haritası
         tr_map = {
             "Extreme Fear": ("Aşırı Korku 😱", "#EF4444"),
             "Fear": ("Korku 😨", "#F97316"),
@@ -45,6 +44,50 @@ def get_fear_and_greed():
         }
         status, color = tr_map.get(classification, (classification, "#94A3B8"))
         return value, status, color
+    except:
+        return 50, "Nötr 😐", "#94A3B8"
+
+# --- 2. GELİŞMİŞ MATEMATİKSEL PİYASA PSİKOLOJİSİ SİMÜLATÖRÜ (NASDAQ & EMTİA İÇİN) ---
+def simulate_market_fng(symbols):
+    try:
+        # Endeks mantığı kurmak için verilen sembollerin günlük rsi ve trend durumlarını tarıyoruz
+        rsi_list = []
+        trend_list = []
+        
+        for sym in symbols:
+            df = yf.download(sym, period="60d", interval="1d", progress=False)
+            if df.empty: continue
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = df.columns.get_level_values(0)
+                
+            # RSI 14 Günlük
+            delta = df['Close'].diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+            rs = gain / (loss + 1e-10)
+            rsi = (100 - (100 / (1 + rs))).iloc[-1]
+            rsi_list.append(rsi)
+            
+            # Fiyatın 20 günlük ortalamaya göre durumu (Trend)
+            sma20 = df['Close'].rolling(window=20).mean().iloc[-1]
+            son_fiyat = df['Close'].iloc[-1]
+            trend_list.append(1 if son_fiyat > sma20 else 0)
+            
+        if not rsi_list: return 50, "Nötr 😐", "#94A3B8"
+        
+        # Ortalama bir psikoloji skoru üretiyoruz (RSI ve Trend ağırlıklı)
+        avg_rsi = sum(rsi_list) / len(rsi_list)
+        avg_trend = sum(trend_list) / len(trend_list)
+        
+        # Skoru 0-100 arasına kalibre ediyoruz
+        final_score = int((avg_rsi * 0.7) + (avg_trend * 100 * 0.3))
+        final_score = max(5, min(95, final_score)) # Sınırları koru
+        
+        if final_score < 30: return final_score, "Aşırı Korku 😱", "#EF4444"
+        elif final_score < 45: return final_score, "Korku 😨", "#F97316"
+        elif final_score < 55: return final_score, "Nötr 😐", "#94A3B8"
+        elif final_score < 75: return final_score, "Açgözlülük 🤑", "#10B981"
+        else: return final_score, "Aşırı Açgözlülük 🚀", "#34D399"
     except:
         return 50, "Nötr 😐", "#94A3B8"
 
@@ -106,7 +149,7 @@ def analiz_et_safe(market, min_hours, interval):
         
         df = df.dropna()
         
-        # Hedef tanımlama (Dinamik)
+        # Hedef tanımlama
         df['Hedef'] = np.where(df['Close'].shift(-int(min_hours)) > df['Close'], 1, 0)
         özellikler = ['RSI', 'Price_to_EMA20', 'ATR', 'Upper_Shadow', 'Lower_Shadow', 'Volume_Shock']
         
@@ -208,27 +251,55 @@ st.markdown("""
 
 # PANEL BAŞLIĞI
 st.markdown("""
-<div style="background: linear-gradient(180deg, #0F172A 0%, #020817 100%); border-bottom: 1px solid #1E293B; padding: 15px; margin-bottom: 10px; border-radius: 8px;">
+<div style="background: linear-gradient(180deg, #0F172A 0%, #020817 100%); border-bottom: 1px solid #1E293B; padding: 15px; margin-bottom: 15px; border-radius: 8px;">
     <h1 style="margin: 0; font-size: 22px; font-weight: 800; color: #FFF;">🤖 AI Doji Sinyal Paneli</h1>
     <p style="margin: 0; font-size: 12px; color: #64748B;">Gerçek zamanlı borsa verileri • Python Uyumlu Kararlılık Modu</p>
 </div>
 """, unsafe_allow_html=True)
 
-# --- CANLI PİYASA PSİKOLOJİSİ BARININ EKRANA BASILMASI ---
-fng_val, fng_status, fng_color = get_fear_and_greed()
-st.markdown(f"""
-<div style="background: #0F172A; border: 1px solid #1E293B; padding: 12px; border-radius: 8px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between;">
-    <div style="font-size: 13px; font-weight: 600; color: #94A3B8;">📊 Küresel Kripto/Piyasa Duyarlılığı:</div>
-    <div style="display: flex; align-items: center; gap: 15px; width: 60%;">
-        <div style="flex-grow: 1; background: #1E293B; height: 10px; border-radius: 5px; overflow: hidden;">
-            <div style="background: {fng_color}; width: {fng_val}%; height: 10px; border-radius: 5px;"></div>
+# --- 🚀 3 FARKLI PİYASA PSİKOLOJİSİ ALANI (SAYFA BAŞINDA) ---
+with st.spinner("Piyasa psikolojileri canlı analiz ediliyor..."):
+    # Verileri hazırlıyoruz
+    c_val, c_status, c_color = get_crypto_fng()
+    n_val, n_status, n_color = simulate_market_fng(["AAPL", "TSLA", "NVDA", "MSFT"])
+    e_val, e_status, e_color = simulate_market_fng(["GC=F", "SI=F"])
+
+fng_cols = st.columns(3)
+
+with fng_cols[0]:
+    st.markdown(f"""
+    <div style="background: #0F172A; border: 1px solid #1E293B; padding: 12px; border-radius: 8px; min-height: 85px;">
+        <div style="font-size: 11px; font-weight: 700; color: #64748B; margin-bottom: 6px;">🪙 KRİPTO PİYASASI (BTC/ETH)</div>
+        <div style="background: #1E293B; height: 6px; border-radius: 3px; overflow: hidden; margin-bottom: 8px;">
+            <div style="background: {c_color}; width: {c_val}%; height: 6px;"></div>
         </div>
-        <div style="color: {fng_color}; font-weight: 800; font-size: 14px; min-width: 150px; text-align: right;">
-            {fng_status} ({fng_val}/100)
-        </div>
+        <div style="color: {c_color}; font-weight: 800; font-size: 13px; text-align: right;">{c_status} ({c_val}/100)</div>
     </div>
-</div>
-""", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
+
+with fng_cols[1]:
+    st.markdown(f"""
+    <div style="background: #0F172A; border: 1px solid #1E293B; padding: 12px; border-radius: 8px; min-height: 85px;">
+        <div style="font-size: 11px; font-weight: 700; color: #64748B; margin-bottom: 6px;">🇺🇸 ABD BORSALARI (NASDAQ)</div>
+        <div style="background: #1E293B; height: 6px; border-radius: 3px; overflow: hidden; margin-bottom: 8px;">
+            <div style="background: {n_color}; width: {n_val}%; height: 6px;"></div>
+        </div>
+        <div style="color: {n_color}; font-weight: 800; font-size: 13px; text-align: right;">{n_status} ({n_val}/100)</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with fng_cols[2]:
+    st.markdown(f"""
+    <div style="background: #0F172A; border: 1px solid #1E293B; padding: 12px; border-radius: 8px; min-height: 85px;">
+        <div style="font-size: 11px; font-weight: 700; color: #64748B; margin-bottom: 6px;">👑 EMTİA PİYASASI (ALTIN/GÜMÜŞ)</div>
+        <div style="background: #1E293B; height: 6px; border-radius: 3px; overflow: hidden; margin-bottom: 8px;">
+            <div style="background: {e_color}; width: {e_val}%; height: 6px;"></div>
+        </div>
+        <div style="color: {e_color}; font-weight: 800; font-size: 13px; text-align: right;">{e_status} ({e_val}/100)</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+st.write("") # Küçük boşluk
 
 # --- TRADINGVIEW MODAL ALANI ---
 if st.session_state.chart_open:
