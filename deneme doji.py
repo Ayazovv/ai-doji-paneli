@@ -130,27 +130,38 @@ st.markdown("""
 if st.session_state.chart_open:
     c_market = st.session_state.chart_open
     
-    # Bilgileri çekelim
     doji_turu = "Standart"
     gecen_sure = "Bilinmeyen"
+    rsi_degeri = "-"
+    sinyal_yonu = "-"
+    
+    # Python'da bulduğumuz Doji saatini çekelim
     if c_market["symbol"] in st.session_state.results:
         res_data = st.session_state.results[c_market["symbol"]]["result"]
         doji_turu = res_data["dojiType"]
         gecen_sure = f"{res_data['hoursAgo']} Saat Önce"
+        rsi_degeri = res_data["rsi"]
+        sinyal_yonu = res_data["signal"]
 
     st.markdown(f"### 📊 Canlı Grafik: {c_market['name']} ({c_market['tv']})")
     
-    # Formasyon Bilgi Kartı
+    # Kullanıcıya nerede arayacağını net gösteren yeni bilgi paneli
+    border_color = "#34D399" if sinyal_yonu == "BUY" else "#F87171"
     st.markdown(f"""
-    <div style="background: #1E293B; border-left: 4px solid #F59E0B; padding: 12px; margin-bottom: 15px; border-radius: 6px;">
-        <h4 style="margin: 0 0 5px 0; color: #F59E0B; font-size: 14px;">🕵️‍♂️ Formasyon ve Grafik Bilgisi</h4>
-        <p style="margin: 0; font-size: 13px; color: #CBD5E1;">
-            Bu grafikte yaklaşık <b>{gecen_sure}</b> bir <b>{doji_turu} Doji</b> oluşumu tespit edildi.<br>
-            Grafik üzerinde otomatik <b>Doji Göstergesi (Candlestick Doji)</b> aktifleştirilmiştir. Geçmiş mumlardaki ve son saatlerdeki <b>"D"</b> harfli mumları inceleyiniz.
+    <div style="background: #0F172A; border: 1px solid #1E293B; border-left: 5px solid {border_color}; padding: 15px; margin-bottom: 15px; border-radius: 8px;">
+        <h4 style="margin: 0 0 8px 0; color: #FFF; font-size: 15px;">🔍 Doji Formasyon Lokasyonu</h4>
+        <p style="margin: 0; font-size: 13px; color: #94A3B8; line-height: 1.5;">
+            • <b>Tespit Edilen Tür:</b> <span style="color: #F59E0B;">{doji_turu} Doji</span><br>
+            • <b>Zaman:</b> Grafikteki <b>en sağdaki (son) mumlardan yaklaşık {gecen_sure} önceki</b> muma bakmalısınız.<br>
+            • <b>RSI Durumu:</b> {rsi_degeri} (Yapay zeka bu doğrultuda <b style="color: {border_color};">{sinyal_yonu}</b> yönlü tahmin üretti).
+        </p>
+        <p style="margin: 8px 0 0 0; font-size: 12px; color: #64748B; font-style: italic;">
+            Not: TradingView widget kısıtlamaları nedeniyle grafik üzerine harici "D" harfi basılamamaktadır. Lütfen son mumdan geriye doğru saat hesabı yapınız.
         </p>
     </div>
     """, unsafe_allow_html=True)
     
+    # Temizlenmiş ve kararlı TradingView kodu
     html_code = """
     <div id="tv-chart-container" style="height:500px;"></div>
     <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
@@ -166,9 +177,10 @@ if st.session_state.chart_open:
       "container_id": "tv-chart-container",
       "studies": [
         "RSI@tv-basicstudies", 
-        "MAExp@tv-basicstudies",
-        "CandlestickDoji@tv-basicstudies"
-      ]
+        "MAExp@tv-basicstudies"
+      ],
+      "disabled_features": ["header_saveload"],
+      "enabled_features": ["move_playlist_to_left"]
     });
     </script>
     """
