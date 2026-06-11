@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Thu Jun 11 23:04:21 2026
-
-@author: ayazk
+AI Doji Terminali - XGBoost Edition
 """
 
 import streamlit as st
@@ -11,7 +9,7 @@ import pandas as pd
 import numpy as np
 import requests
 from datetime import datetime, timezone
-from sklearn.ensemble import RandomForestClassifier
+import xgboost as xgb
 
 # --- SAYFA AYARLARI ---
 st.set_page_config(page_title="AI Doji Terminali", layout="wide", initial_sidebar_state="auto")
@@ -105,11 +103,11 @@ def piyasa_rejimi_hesapla(symbol):
         ema50 = df['EMA50'].iloc[-1]
 
         # Rejim Sınıflandırması
-        if ema20 > ema50 and rsi > 60: return "Güçlü Boğa 🚀", "#10B981" # Parlak Yeşil
-        elif ema20 > ema50: return "Boğa 🟢", "#059669" # Koyu Yeşil
-        elif ema20 < ema50 and rsi < 40: return "Güçlü Ayı 🩸", "#EF4444" # Parlak Kırmızı
-        elif ema20 < ema50: return "Ayı 🔴", "#B91C1C" # Koyu Kırmızı
-        else: return "Yatay ⚪", "#64748B" # Gri
+        if ema20 > ema50 and rsi > 60: return "Güçlü Boğa 🚀", "#10B981"
+        elif ema20 > ema50: return "Boğa 🟢", "#059669"
+        elif ema20 < ema50 and rsi < 40: return "Güçlü Ayı 🩸", "#EF4444"
+        elif ema20 < ema50: return "Ayı 🔴", "#B91C1C"
+        else: return "Yatay ⚪", "#64748B"
     except:
         return "Bilinmiyor", "#334155"
 
@@ -165,7 +163,6 @@ def analiz_et_safe(market, min_hours, interval):
         saat_katsayisi = 4 if interval == "4h" else (24 if interval == "1d" else 1)
         gecen_mum = round(gecen_saat / saat_katsayisi, 1)
         
-        # 🎯 GEÇMİŞİ ZORLAMA bypass lojiği tam bu noktada esnetildi
         is_forced = "force_past" in st.session_state and st.session_state.force_past
         
         if not is_forced:
@@ -176,11 +173,20 @@ def analiz_et_safe(market, min_hours, interval):
         y = df['Hedef'].iloc[:-int(min_hours)]
         win_rate, toplam_sinyal = 50, 0
         
-        # Test modunda veri seti küçük olsa bile algoritmanın çökmesini engelliyoruz
         min_required_len = 15 if is_forced else 50
         
         if len(X) > min_required_len:
-            model = RandomForestClassifier(n_estimators=60, max_depth=8, random_state=42)
+            # --- XGBoost Model Tanımlaması ---
+            model = xgb.XGBClassifier(
+                n_estimators=150,
+                max_depth=5,
+                learning_rate=0.05,
+                subsample=0.8,
+                colsample_bytree=0.8,
+                random_state=42,
+                eval_metric='logloss'
+            )
+            
             model.fit(X, y)
             doji_df = df[df['Doji'] == True].iloc[:-int(min_hours)]
             if not doji_df.empty:
@@ -232,7 +238,7 @@ st.markdown("""
 # --- 🌐 SOL MENÜ NAVİGASYONU (SIDEBAR) ---
 st.sidebar.markdown("""
 <div style='text-align: center; padding: 10px; border-bottom: 1px solid #1E293B; margin-bottom: 20px;'>
-    <h3 style='color: #FFF; margin: 0; font-size: 16px;'>🌐 AI TERMINAL v3</h3>
+    <h3 style='color: #FFF; margin: 0; font-size: 16px;'>🌐 AI TERMINAL v4 (XGBoost)</h3>
 </div>
 """, unsafe_allow_html=True)
 
@@ -258,7 +264,7 @@ st.session_state.force_past = st.sidebar.checkbox(
 st.markdown(f"""
 <div style="background: linear-gradient(180deg, #0F172A 0%, #020817 100%); border-bottom: 1px solid #1E293B; padding: 15px; margin-bottom: 15px; border-radius: 8px;">
     <h1 style="margin: 0; font-size: 22px; font-weight: 800; color: #FFF;">🤖 AI Doji Sinyal Paneli</h1>
-    <p style="margin: 0; font-size: 12px; color: #64748B;">Mevcut Oda: <b>{secilen_sayfa}</b> • Python Uyumlu Kararlılık Modu</p>
+    <p style="margin: 0; font-size: 12px; color: #64748B;">Mevcut Oda: <b>{secilen_sayfa}</b> • XGBoost Motoru Aktif</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -314,7 +320,6 @@ if secilen_sayfa == "🏠 Genel Dashboard":
         heatmap_html = "<div style='display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 25px;'>"
         for m in MARKETS:
             rejim, renk = piyasa_rejimi_hesapla(m["symbol"])
-            # Streamlit kod bloğu sanmasın diye HTML tek satıra sıkıştırıldı
             heatmap_html += f"<div style='background: {renk}; padding: 12px; border-radius: 8px; text-align: center; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 4px 6px rgba(0,0,0,0.1);'><div style='color: rgba(255,255,255,0.9); font-size: 11px; font-weight: 700; margin-bottom: 4px;'>{m['name']}</div><div style='color: #FFF; font-size: 13px; font-weight: 800;'>{rejim}</div></div>"
         
         heatmap_html += "</div>"
@@ -351,7 +356,7 @@ elif secilen_sayfa == "🇺🇸 NASDAQ Terminali":
         <div style="font-size:12px; font-weight:700; color:#64748B; margin-bottom:6px;">🇺🇸 ABD TEKNOLOJİ BORSASI DİNAMİKLERİ (NASDAQ)</div>
         <div style="background:#1E293B; height:8px; border-radius:4px; overflow:hidden; margin-bottom:10px;"><div style="background:{b_clr}; width:100%; height:8px;"></div></div>
         <div style="display:flex; justify-content:space-between; align-items:center;">
-            <div style="font-size:12px; color:#94A3B8;">⚡ Volatilite ($ATR$ Oranı): <b style="color:{v_clr};">{vol}</b> • 💵 Durum: <b style="color:#FFF;">Hafta Sonu Kapanışı</b></div>
+            <div style="font-size:12px; color:#94A3B8;">⚡ Volatilite (ATR Oranı): <b style="color:{v_clr};">{vol}</b> • 💵 Durum: <b style="color:#FFF;">Hafta Sonu Kapanışı</b></div>
             <div style="color:{b_clr}; font-weight:800; font-size:15px;">{hac}</div>
         </div>
     </div>""".format(b_clr=n_bar_color, v_clr=n_vol_clr, vol=n_vol, hac=n_hac)
@@ -369,7 +374,7 @@ elif secilen_sayfa == "👑 Emtia Terminali":
         <div style="font-size:12px; font-weight:700; color:#64748B; margin-bottom:6px;">👑 DEĞERLİ METAL PİYASA PSİKOLOJİSİ (ALTIN/GÜMÜŞ)</div>
         <div style="background:#1E293B; height:8px; border-radius:4px; overflow:hidden; margin-bottom:10px;"><div style="background:{b_clr}; width:100%; height:8px;"></div></div>
         <div style="display:flex; justify-content:space-between; align-items:center;">
-            <div style="font-size:12px; color:#94A3B8;">⚡ Volatilite ($ATR$): <b style="color:{v_clr};">{vol}</b> • 💵 Durum: <b style="color:#FFF;">Hafta Sonu Kapanışı</b></div>
+            <div style="font-size:12px; color:#94A3B8;">⚡ Volatilite (ATR): <b style="color:{v_clr};">{vol}</b> • 💵 Durum: <b style="color:#FFF;">Hafta Sonu Kapanışı</b></div>
             <div style="color:{b_clr}; font-weight:800; font-size:15px;">{hac}</div>
         </div>
     </div>""".format(b_clr=e_bar_color, v_clr=e_vol_clr, vol=e_vol, hac=e_hac)
