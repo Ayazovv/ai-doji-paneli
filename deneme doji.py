@@ -170,10 +170,10 @@ def buyuk_trend_kontrol(symbol):
 
 def analiz_et_safe(market, min_hours, interval, doji_modu):
     try:
-        # Hızlı indirme için optimize edilmiş periyotlar
-        if interval == "1h": periyot = "3mo"
+        # ADIM 1: DAHA GENİŞ EĞİTİM VERİSİ (Popülasyonu büyütüyoruz)
+        if interval == "1h": periyot = "6mo" # Forex için 1y bazen boş döner, 6 ay en güvenlisidir.
         elif interval == "4h": periyot = "2y"
-        else: periyot = "5y" # Günlük grafikte son 5 yıla bakarak tüm krizleri öğren
+        else: periyot = "5y"
         
         df = veri_indir(market["symbol"], periyot, interval)
         if df.empty: return None
