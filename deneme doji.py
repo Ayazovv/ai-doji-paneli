@@ -49,6 +49,28 @@ def get_crypto_fng():
     except:
         return 50, "Nötr 😐", "#94A3B8"
 
+def get_nasdaq_fng():
+    try:
+        # yfinance üzerinden anlık VIX (Korku Endeksi) verisini çekiyoruz
+        vix_df = yf.download("^VIX", period="5d", interval="1d", progress=False)
+        if isinstance(vix_df.columns, pd.MultiIndex):
+            vix_df.columns = vix_df.columns.get_level_values(0)
+            
+        son_vix = float(vix_df['Close'].iloc[-1])
+        
+        # VIX değerini 0-100 arası Korku/Açgözlülük skoruna çevirme (Ters Orantı Normalize)
+        # VIX 10 ise FNG = 100 (Aşırı Açgözlülük), VIX 40 ise FNG = 0 (Aşırı Korku)
+        fng_score = 100 - ((son_vix - 10) / (40 - 10) * 100)
+        fng_score = max(0, min(100, int(fng_score))) # Değeri 0-100 sınırlarına hapset
+        
+        if fng_score < 25: return fng_score, "Aşırı Korku 😱", "#EF4444"
+        elif fng_score < 45: return fng_score, "Korku 😨", "#F97316"
+        elif fng_score < 55: return fng_score, "Nötr 😐", "#94A3B8"
+        elif fng_score < 75: return fng_score, "Açgözlülük 🤑", "#10B981"
+        else: return fng_score, "Aşırı Açgözlülük 🚀", "#34D399"
+    except:
+        return 50, "Nötr 😐", "#94A3B8"
+
 def get_real_market_dynamics(symbols):
     try:
         vol_results = []
@@ -388,12 +410,15 @@ if secilen_sayfa == "🏠 Genel Dashboard":
         
     # NASDAQ Kartı
     with fng_cols[1]:
+        # NASDAQ için özel korku skorunu çağır
+        n_fng_val, n_fng_stat, n_fng_clr = get_nasdaq_fng() 
+        
         html_n = """<div style="background:#0F172A; border:1px solid #1E293B; padding:12px; border-radius:8px; min-height:110px;">
             <div style="font-size:11px; font-weight:700; color:#64748B; margin-bottom:6px;">🇺🇸 ABD BORSALARI (NASDAQ)</div>
-            <div style="background:#1E293B; height:6px; border-radius:3px; overflow:hidden; margin-bottom:8px;"><div style="background:{b_clr}; width:100%; height:6px;"></div></div>
-            <div style="color:{b_clr}; font-weight:800; font-size:13px; text-align:right; margin-bottom:6px;">Piyasa: {durum}</div>
+            <div style="background:#1E293B; height:6px; border-radius:3px; overflow:hidden; margin-bottom:8px;"><div style="background:{clr}; width:{val}%; height:6px;"></div></div>
+            <div style="color:{clr}; font-weight:800; font-size:13px; text-align:right; margin-bottom:6px;">{stat} ({val}/100)</div>
             <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748B; border-top:1px solid rgba(51,65,85,0.3); padding-top:4px;"><span>⚡ Vol: <b style="color:{v_clr};">{vol}</b></span><span>💵 Hacim: <b style="color:#FFF;">{hac}</b></span></div>
-        </div>""".format(b_clr=n_bar_color, hac=n_hac, v_clr=n_vol_clr, vol=n_vol, durum=p_durum)
+        </div>""".format(clr=n_fng_clr, val=n_fng_val, stat=n_fng_stat, v_clr=n_vol_clr, vol=n_vol, hac=n_hac)
         st.markdown(html_n, unsafe_allow_html=True)
         
     # Emtia Kartı
