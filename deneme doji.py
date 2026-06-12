@@ -551,7 +551,7 @@ if st.button("🚀 {} İçin Canlı AI Taraması Başlat".format(secilen_sayfa.s
     
     # Çoklu işlem için yardımcı fonksiyon
     def piyasa_isle(m):
-        return m, analiz_et_safe(m, global_min_hours, global_interval)
+        return m, analiz_et_safe(m, global_min_hours, global_interval, global_doji_modu)
 
     # Aynı anda maksimum 10 işlem (iş parçacığı) çalıştır
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
