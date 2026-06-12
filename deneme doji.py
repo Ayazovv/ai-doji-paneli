@@ -591,7 +591,10 @@ valid_signals = {k: v for k, v in st.session_state.results.items() if v["market"
 if not valid_signals:
     st.markdown("""<div style="background:#0F172A; border:1px solid #1E293B; border-radius:12px; padding:35px; text-align:center; margin-top:10px;"><p style="color:#64748B; font-weight:600; margin:0;">Bu odada kriterlerine uyan aktif bir Doji sinyali bulunamadı.</p><p style="color:#475569; font-size:11px; margin:4px 0 0 0;">Sol menüden 'Zaman Filtresini Kaldır' seçeneğini aktif ederek geçmişteki son mumu ekrana zorlayabilirsiniz.</p></div>""", unsafe_allow_html=True)
 else:
-    for sym, data in valid_signals.items():
+    # Sinyalleri 'winRate' değerine göre yüksekten düşüğe (reverse=True) sıralıyoruz
+    sirali_sinyaller = sorted(valid_signals.items(), key=lambda item: item[1]["result"]["winRate"], reverse=True)
+    
+    for sym, data in sirali_sinyaller:
         m, r = data["market"], data["result"]
         is_buy = r["signal"] == "BUY"
         border_color = "#34D399" if is_buy else "#F87171"
