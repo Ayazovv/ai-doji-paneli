@@ -191,20 +191,28 @@ def analiz_et_safe(market, min_hours, interval):
             'Trend_Slope': 'Trend Eğimi'
         }
         
-        # --- DOJI YAKALAMA MANTIĞI (Sadece son 20 muma bakar) ---
+        # --- OLGUNLAŞMIŞ DOJI MANTIĞI (4-5 saat önce oluşanlar) ---
         son_20_mum = df.tail(20)
         doji_olanlar = son_20_mum[son_20_mum['Doji'] == True]
         
         is_forced = "force_past" in st.session_state and st.session_state.force_past
         
-        if doji_olanlar.empty and not is_forced: 
-            return None # Son 20 mumda Doji yoksa pas geç
-            
+        olgun_dojiler = []
         if not doji_olanlar.empty:
-            en_son_doji_index = np.where(df.index == doji_olanlar.index[-1])[0][0]
-            gecen_mum = len(df) - 1 - en_son_doji_index
+            for idx in doji_olanlar.index:
+                mum_yasi = len(df) - 1 - np.where(df.index == idx)[0][0]
+                # Sadece üzerinden 4 ile 10 mum arası geçmiş olanları kabul et
+                if 4 <= mum_yasi <= 10: 
+                    olgun_dojiler.append(mum_yasi)
+        
+        # Eğer 4-10 mum önce oluşmuş bir Doji YOKSA, pas geç (0, 1, 2, 3 mumlukları istemiyoruz)
+        if not olgun_dojiler and not is_forced:
+            return None 
+            
+        if olgun_dojiler:
+            gecen_mum = min(olgun_dojiler) # Şarta uyan en yeni (örn: 4 mum önceki)
         else:
-            gecen_mum = 0 # Forced mod için varsayılan
+            gecen_mum = 0 # Zorunlu mod açıksa hata vermesin diye
             
         X = df[özellikler].iloc[:-int(min_hours)]
         y = df['Hedef'].iloc[:-int(min_hours)]
