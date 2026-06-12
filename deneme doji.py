@@ -24,6 +24,8 @@ def veri_indir(symbol, periyot, interval):
 MARKETS = [
     {"name": "Altın (XAU/USD)", "symbol": "GC=F", "tv": "OANDA:XAUUSD", "category": "Emtia", "color": "#F59E0B"},
     {"name": "Gümüş (XAG/USD)", "symbol": "SI=F", "tv": "OANDA:XAGUSD", "category": "Emtia", "color": "#94A3B8"},
+    {"name": "EUR/USD", "symbol": "EURUSD=X", "tv": "OANDA:EURUSD", "category": "Forex", "color": "#3B82F6"},
+    {"name": "NASDAQ Endeksi", "symbol": "^IXIC", "tv": "NASDAQ:IXIC", "category": "NASDAQ", "color": "#A855F7"},
     {"name": "Apple", "symbol": "AAPL", "tv": "NASDAQ:AAPL", "category": "NASDAQ", "color": "#60A5FA"},
     {"name": "Tesla", "symbol": "TSLA", "tv": "NASDAQ:TSLA", "category": "NASDAQ", "color": "#EF4444"},
     {"name": "NVIDIA", "symbol": "NVDA", "tv": "NASDAQ:NVDA", "category": "NASDAQ", "color": "#10B981"},
@@ -382,7 +384,7 @@ st.sidebar.markdown("""
 
 secilen_sayfa = st.sidebar.radio(
     "📊 İŞLEM ODALARI",
-    ["🏠 Genel Dashboard", "🪙 Kripto Terminali", "🇺🇸 NASDAQ Terminali", "👑 Emtia Terminali"]
+    ["🏠 Genel Dashboard", "💱 Forex Terminali", "🪙 Kripto Terminali", "🇺🇸 NASDAQ Terminali", "👑 Emtia Terminali"]
 )
 
 st.sidebar.markdown("---")
@@ -513,6 +515,24 @@ elif secilen_sayfa == "👑 Emtia Terminali":
         e_vol, e_vol_clr, e_hac = get_real_market_dynamics(["GC=F", "SI=F"])
         e_bar_color = "#EF4444" if "Kapalı" in e_hac else ("#10B981" if "Güçlü" in e_hac else "#94A3B8")
         p_durum = dinamik_piyasa_durumu()
+
+elif secilen_sayfa == "💱 Forex Terminali":
+    with st.spinner("Forex (Döviz) verileri analiz ediliyor..."):
+        f_vol, f_vol_clr, f_hac = get_real_market_dynamics(["EURUSD=X"])
+        f_bar_color = "#EF4444" if "Kapalı" in f_hac else ("#10B981" if "Güçlü" in f_hac else "#94A3B8")
+        p_durum = dinamik_piyasa_durumu()
+        
+    html_single_f = """<div style="background:#0F172A; border:1px solid #1E293B; padding:15px; border-radius:8px; margin-bottom:20px;">
+        <div style="font-size:12px; font-weight:700; color:#64748B; margin-bottom:6px;">💱 KÜRESEL DÖVİZ PİYASASI (FOREX)</div>
+        <div style="background:#1E293B; height:8px; border-radius:4px; overflow:hidden; margin-bottom:10px;"><div style="background:{b_clr}; width:100%; height:8px;"></div></div>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="font-size:12px; color:#94A3B8;">⚡ Volatilite (ATR): <b style="color:{v_clr};">{vol}</b> • 💵 Durum: <b style="color:#FFF;">{durum}</b></div>
+            <div style="color:{b_clr}; font-weight:800; font-size:15px;">{hac}</div>
+        </div>
+    </div>""".format(b_clr=f_bar_color, v_clr=f_vol_clr, vol=f_vol, hac=f_hac, durum=p_durum)
+    st.markdown(html_single_f, unsafe_allow_html=True)
+    
+    aktif_list = [m for m in MARKETS if m["category"] == "Forex"]
         
     html_single_e = """<div style="background:#0F172A; border:1px solid #1E293B; padding:15px; border-radius:8px; margin-bottom:20px;">
         <div style="font-size:12px; font-weight:700; color:#64748B; margin-bottom:6px;">👑 DEĞERLİ METAL PİYASA PSİKOLOJİSİ (ALTIN/GÜMÜŞ)</div>
