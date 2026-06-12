@@ -591,21 +591,28 @@ valid_signals = {k: v for k, v in st.session_state.results.items() if v["market"
 if not valid_signals:
     st.info("Bu odada şu an uygun sinyal bulunmuyor.")
 else:
+    # Win-Rate'e göre sıralama
     sirali_sinyaller = sorted(valid_signals.items(), key=lambda item: item[1]["result"].get("winRate", 0), reverse=True)
     
     for sym, data in sirali_sinyaller:
         m, r = data["market"], data["result"]
+        is_buy = r["signal"] == "BUY"
         
-        # Kart tasarımı: HTML ile uğraşmadan sütunlarla yapıyoruz
         with st.container(border=True):
             col1, col2, col3 = st.columns([2, 1, 1])
             
             with col1:
-                st.subheader(m['name'])
+                # BUY/SELL Sinyali
+                st.subheader(f"{m['name']}  :orange[{r['signal']}]")
+                
+                # Rozet mantığı (Sadece SELL ve pozitif değişim varsa)
+                if not is_buy and r['change'] > 0:
+                    st.success(f"🎣 Tepe Fırsatı (+%{r['change']:.2f})", icon="📈")
+                
                 st.caption(f"Doji: {r['dojiType']} | Trend: {r['bigTrend']}")
             
             with col2:
-                st.metric("Tahmin Güveni", f"%{r['confidence']}")
+                st.metric("Güven", f"%{r['confidence']}")
                 st.metric("Win-Rate", f"%{r['winRate']}")
                 
             with col3:
