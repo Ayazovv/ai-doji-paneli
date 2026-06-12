@@ -188,13 +188,20 @@ def analiz_et_safe(market, min_hours, interval):
             'Trend_Slope': 'Trend Eğimi'
         }
         
-        # Sadece en son 2 muma bakıyoruz (Taze sinyal kontrolü)
-        if df['Doji'].iloc[-1]:
-            gecen_mum = 0
-        elif df['Doji'].iloc[-2]:
-            gecen_mum = 1
-        else:
-            return None # Son 2 mumda Doji yoksa, işlem yapma!
+        # --- YENİ MANTIK: Son 10 muma bak, varsa en sonuncuyu al ---
+        son_10_mum = df.tail(10)
+        doji_olanlar = son_10_mum[son_10_mum['Doji'] == True]
+        
+        if doji_olanlar.empty: 
+            return None # Son 10 mumda hiç Doji yoksa gerçekten sinyal yoktur
+        
+        # En son oluşan Doji'yi seçiyoruz
+        en_son_doji = doji_olanlar.iloc[-1]
+        gecen_mum = len(df) - 1 - df.index.get_loc(en_son_doji.name)
+        
+        # Eğer Doji çok eskiyse (örneğin 10 mumdan eskiyse) yine de alma
+        if gecen_mum > 10: 
+            return None
             
         X = df[özellikler].iloc[:-int(min_hours)]
         y = df['Hedef'].iloc[:-int(min_hours)]
