@@ -591,7 +591,7 @@ valid_signals = {k: v for k, v in st.session_state.results.items() if v["market"
 if not valid_signals:
     st.info("Bu odada şu an uygun sinyal bulunmuyor.")
 else:
-    # Win-Rate'e göre sıralama
+    # --- Win-Rate'e göre yüksekten düşüğe sıralama ---
     sirali_sinyaller = sorted(valid_signals.items(), key=lambda item: item[1]["result"].get("winRate", 0), reverse=True)
     
     for sym, data in sirali_sinyaller:
@@ -602,21 +602,23 @@ else:
             col1, col2, col3 = st.columns([2, 1, 1])
             
             with col1:
-                # Sinyal ve Doji konumu burada:
+                # Sinyal ve Doji konumu
                 st.subheader(f"{m['name']}  :orange[{r['signal']}]")
                 st.write(f"⏳ **Doji Yaşı:** {r['hoursAgo']} mum önce oluştu")
                 
-                # Rozet mantığı
+                # Sadece SELL sinyalleri için Tepe Fırsatı rozeti
                 if not is_buy and r['change'] > 0:
                     st.success(f"🎣 Tepe Fırsatı (+%{r['change']:.2f})", icon="📈")
                 
                 st.caption(f"Doji Tipi: {r['dojiType']} | Büyük Trend: {r['bigTrend']}")
             
             with col2:
+                # Win-Rate ve Güven (Bu değerlere göre zaten sıralı listeleniyorlar)
                 st.metric("Güven", f"%{r['confidence']}")
                 st.metric("Win-Rate", f"%{r['winRate']}")
                 
             with col3:
+                # Fiyat ve değişim verisi
                 st.metric("Fiyat", f"${r['price']:,.2f}", f"{r['change']:.2f}%")
                 
             if st.button(f"📊 {m['name']} Grafiğini İncele", key=f"btn_{m['symbol']}"):
