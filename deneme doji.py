@@ -10,6 +10,7 @@ import numpy as np
 import requests
 from datetime import datetime, timezone
 import xgboost as xgb
+import concurrent.futures
 
 # --- SAYFA AYARLARI ---
 st.set_page_config(page_title="AI Doji Terminali", layout="wide", initial_sidebar_state="auto")
@@ -514,22 +515,37 @@ if st.session_state.chart_open:
         st.rerun()
     st.markdown("---")
 
-# --- GELİŞMİŞ TARAMA BUTONU VE İLERLEME ÇUBUĞU ---
+# --- GELİŞMİŞ TARAMA BUTONU VE İLERLEME ÇUBUĞU (ASENKRON MOTOR) ---
 if st.button("🚀 {} İçin Canlı AI Taraması Başlat".format(secilen_sayfa.split()[1])):
-    st.info("📡 Sistem başlatıldı, piyasa verileri çekiliyor ve XGBoost eğitiliyor...")
+    st.info("⚡ Asenkron (Paralel) Tarama başlatıldı, piyasalar aynı anda işleniyor...")
     ilerleme_cubugu = st.progress(0)
     durum_metni = st.empty()
     
     yeni_sonuclar = {}
     toplam_varlik = len(aktif_list)
+    tamamlanan = 0
     
-    for i, m in enumerate(aktif_list):
-        durum_metni.markdown(f"**🔍 Analiz Ediliyor:** {m['name']} ({i+1}/{toplam_varlik})")
-        analiz = analiz_et_safe(m, global_min_hours, global_interval)
-        if analiz: yeni_sonuclar[m["symbol"]] = {"market": m, "result": analiz}
-        ilerleme_cubugu.progress((i + 1) / toplam_varlik)
+    # Çoklu işlem için yardımcı fonksiyon
+    def piyasa_isle(m):
+        return m, analiz_et_safe(m, global_min_hours, global_interval)
+
+    # Aynı anda maksimum 10 işlem (iş parçacığı) çalıştır
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        # Tüm görevleri havuza at ve aynı anda başlat
+        gelecek_gorevler = [executor.submit(piyasa_isle, m) for m in aktif_list]
         
-    durum_metni.success("✅ Tüm piyasa taraması ve XGBoost modellemesi tamamlandı!")
+        # Görevler tamamlandıkça (asenkron olarak) sonuçları topla
+        for future in concurrent.futures.as_completed(gelecek_gorevler):
+            m_data, analiz_sonucu = future.result()
+            
+            if analiz_sonucu: 
+                yeni_sonuclar[m_data["symbol"]] = {"market": m_data, "result": analiz_sonucu}
+                
+            tamamlanan += 1
+            durum_metni.markdown(f"**⚡ Paralel İşleniyor:** {tamamlanan}/{toplam_varlik} piyasa tamamlandı.")
+            ilerleme_cubugu.progress(tamamlanan / toplam_varlik)
+            
+    durum_metni.success("✅ Asenkron tarama ışık hızında tamamlandı!")
     st.session_state.results = yeni_sonuclar
     st.rerun()
 
