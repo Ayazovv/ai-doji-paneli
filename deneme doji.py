@@ -168,10 +168,10 @@ def buyuk_trend_kontrol(symbol):
 
 def analiz_et_safe(market, min_hours, interval):
     try:
-        # Hızlı indirme için optimize edilmiş periyotlar
-        if interval == "1h": periyot = "3mo"
-        elif interval == "4h": periyot = "6mo"
-        else: periyot = "2y"
+        # ADIM 1: DAHA GENİŞ EĞİTİM VERİSİ (Popülasyonu büyütüyoruz)
+        if interval == "1h": periyot = "1y" # Yahoo 1 saatlik veride maks 730 gün verir
+        elif interval == "4h": periyot = "2y"
+        else: periyot = "5y" # Günlük grafikte son 5 yıla bakarak tüm krizleri öğren
         
         df = veri_indir(market["symbol"], periyot, interval)
         if df.empty: return None
@@ -218,7 +218,14 @@ def analiz_et_safe(market, min_hours, interval):
         df['Trend_Slope'] = df['EMA20'].diff(3) / (df['EMA20'] + 1e-10) * 100
 
         df = df.dropna()
-        df['Hedef'] = np.where(df['Close'].shift(-int(min_hours)) > df['Close'], 1, 0)
+        # ADIM 2: AKILLI HEDEF DEĞİŞKENİ (Maksimum düşüş / Drawdown kontrolü)
+        suanki_fiyat = df['Close']
+        ilerideki_kapanis = df['Close'].shift(-int(min_hours))
+        # İşleme girdikten sonraki mumlarda fiyatın gördüğü en dip nokta
+        ilerideki_min = df['Low'].shift(-int(min_hours)).rolling(window=int(min_hours)).min()
+        
+        # KURAL: İşleme girdikten sonra fiyat %1'den fazla düşerse (stop patlarsa) VEYA kapanış düşükse 0 (Başarısız)
+        df['Hedef'] = np.where((ilerideki_min < suanki_fiyat * 0.99) | (ilerideki_kapanis < suanki_fiyat), 0, 1)
         
         özellikler = [
             'RSI', 'Price_to_EMA20', 'ATR', 'Upper_Shadow', 'Lower_Shadow', 
@@ -292,15 +299,22 @@ def analiz_et_safe(market, min_hours, interval):
                 n_jobs=-1
             )
             
-            model.fit(X, y)
+            # ADIM 3: ZAMAN SERİSİ VALİDASYONU (%80 Eğitim, %20 Test Ayrımı)
+            split_idx = int(len(X) * 0.8)
+            X_train, y_train = X.iloc[:split_idx], y.iloc[:split_idx]
             
-            doji_df = df[df['Doji'] == True].iloc[:-int(min_hours)]
-            if not doji_df.empty:
-                X_doji = doji_df[özellikler]
-                y_doji = doji_df['Hedef']
-                preds = model.predict(X_doji)
-                toplam_sinyal = len(y_doji)
-                basarili_tahmin = np.sum(preds == y_doji.values)
+            # Sadece geçmiş veri ile modeli eğitiyoruz
+            model.fit(X_train, y_train)
+            
+            # Win-Rate hesaplamasını SADECE modelin hiç görmediği son %20'lik dilimdeki Doji'lerle yap
+            doji_test_df = df.iloc[split_idx:][df.iloc[split_idx:]['Doji'] == True].iloc[:-int(min_hours)]
+            
+            if not doji_test_df.empty:
+                X_test_doji = doji_test_df[özellikler]
+                y_test_doji = doji_test_df['Hedef']
+                preds = model.predict(X_test_doji)
+                toplam_sinyal = len(y_test_doji)
+                basarili_tahmin = np.sum(preds == y_test_doji.values)
                 if toplam_sinyal > 0: 
                     win_rate = int((basarili_tahmin / toplam_sinyal) * 100)
             
