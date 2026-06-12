@@ -288,7 +288,7 @@ def analiz_et_safe(market, min_hours, interval, doji_modu):
         if len(X) > min_required_len:
             model = xgb.XGBClassifier(
                 n_estimators=100,
-                max_depth=2,             
+                max_depth=4,             
                 learning_rate=0.05,
                 subsample=0.6,           
                 colsample_bytree=0.6,    
