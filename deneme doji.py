@@ -59,6 +59,7 @@ def get_real_market_dynamics(symbols):
             if df.empty or len(df) < 20: continue
             if isinstance(df.columns, pd.MultiIndex):
                 df.columns = df.columns.get_level_values(0)
+            
             high_low = df['High'] - df['Low']
             high_close = abs(df['High'] - df['Close'].shift())
             low_close = abs(df['Low'] - df['Close'].shift())
@@ -67,22 +68,31 @@ def get_real_market_dynamics(symbols):
             son_fiyat = df['Close'].iloc[-1]
             vol_ratio = (atr20 / son_fiyat) * 100
             vol_ratios.append(vol_ratio)
-            if 'Volume' in df.columns and df['Volume'].iloc[-1] > 0:
-                son_hacim = df['Volume'].rolling(3).mean().iloc[-1]
-                ort_hacim = df['Volume'].rolling(20).mean().iloc[-1]
+            
+            # --- DÜZELTİLMİŞ HACİM KONTROLÜ ---
+            hacim_sutunu = df['Volume'] if 'Volume' in df.columns else None
+            if hacim_sutunu is not None:
+                # Son gün sıfırsa bir önceki günün hacmini kontrol et
+                aktif_hacim_idx = -1 if df['Volume'].iloc[-1] > 0 else -2
+                
+                son_hacim = df['Volume'].rolling(3).mean().iloc[aktif_hacim_idx]
+                ort_hacim = df['Volume'].rolling(20).mean().iloc[aktif_hacim_idx]
                 hacim_soku = son_hacim / (ort_hacim + 1e-10)
                 vol_results.append(hacim_soku)
                 vol_counts += 1
-        final_vol, final_vol_clr, final_hac = "Düşük 💤", "#64748B", "Piyasa Kapalı 🔒"
+
+        final_vol, final_vol_clr, final_hac = "Düşük 💤", "#64748B", "Veri Yok 🚫"
         if vol_ratios:
             avg_vol_ratio = sum(vol_ratios) / len(vol_ratios)
             if avg_vol_ratio > 2.0: final_vol, final_vol_clr = "Yüksek 🔥", "#34D399"
             elif avg_vol_ratio > 1.0: final_vol, final_vol_clr = "Normal 📊", "#F59E0B"
+            
         if vol_counts > 0 and sum(vol_results) > 0:
             avg_hacim_soku = sum(vol_results) / vol_counts
-            if avg_hacim_soku > 1.1: final_hac = "Güçlü 💰"
-            elif avg_hacim_soku > 0.4: final_hac = "Normal 📈"
+            if avg_hacim_soku > 1.15: final_hac = "Güçlü 💰"
+            elif avg_hacim_soku > 0.85: final_hac = "Normal 📈"
             else: final_hac = "Zayıf 📉"
+            
         return final_vol, final_vol_clr, final_hac
     except:
         return "Normal 📊", "#F59E0B", "Normal 📈"
