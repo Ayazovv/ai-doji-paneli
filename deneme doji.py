@@ -120,8 +120,7 @@ def dinamik_piyasa_durumu():
     gun = now_utc.weekday()
     saat = now_utc.hour
     
-    # 5=Cumartesi, 6=Pazar. 
-    # Ayrıca Cuma günü (4) UTC saatiyle 21:00'den sonra (TSİ gece 00:00) piyasalar kapanır.
+    # 5=Cumartesi, 6=Pazar. Cuma UTC 21:00 sonrası kapalı.
     if gun == 5 or gun == 6 or (gun == 4 and saat >= 21):
         return "Kapalı 💤"
     else:
@@ -179,20 +178,16 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
         govde = abs(df['Open'] - df['Close'])
         toplam_boy = df['High'] - df['Low']
         
-        # --- PİYASA DUYARLI DOJİ FİLTRESİ (Forex Gürültü Engelleme) ---
+        # Piyasa Duyarlı Doji Filtresi
         if "Dinamik" in doji_modu:
             ortalama_boy = toplam_boy.rolling(window=20).mean()
             volatilite_carpani = toplam_boy / (ortalama_boy + 1e-10)
-            
-            # Forex piyasası çok dar olduğu için hassasiyeti yarı yarıya indirgeyerek sahte sinyalleri eliyoruz
             if market["category"] == "Forex":
                 dinamik_sinir = (0.12 * volatilite_carpani).clip(lower=0.05, upper=0.20)
             else:
                 dinamik_sinir = (0.3 * volatilite_carpani).clip(lower=0.15, upper=0.45)
-                
             df['Doji'] = govde <= (toplam_boy * dinamik_sinir)
         else:
-            # Sabit modda bile Forex için daha acımasız ve dar bir sınır (%10) uyguluyoruz
             sinir = 0.10 if market["category"] == "Forex" else 0.30
             df['Doji'] = govde <= (toplam_boy * sinir)
         
@@ -232,37 +227,27 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
         df = df.dropna()
         suanki_fiyat = df['Close']
         ilerideki_kapanis = df['Close'].shift(-int(min_hours))
+        
         indexer = pd.api.indexers.FixedForwardWindowIndexer(window_size=int(min_hours))
         ilerideki_min = df['Low'].shift(-1).rolling(window=indexer).min()
         
-        # BUY Hedefi: Gelecekteki kapanış %1 yukarıda VEYA stop seviyesi kırılmamışsa
-        buy_target = np.where(
-            (ilerideki_kapanis > suanki_fiyat * 1.01) &
-            (ilerideki_min >= suanki_fiyat * 0.99),
-            1, 0
-        )
-        # SELL Hedefi: Gelecekteki kapanış %1 aşağıdaysa
-        sell_target = np.where(
-            ilerideki_kapanis < suanki_fiyat * 0.99,
-            1, 0
-        )
-        
-        # Final Hedef: BUY=1, SELL=0, Kararsız=-1 (Kararsız mumlar veriden temizlenir)
+        # Gelecek hedefleri
+        buy_target = np.where((ilerideki_kapanis > suanki_fiyat * 1.01) & (ilerideki_min >= suanki_fiyat * 0.99), 1, 0)
+        sell_target = np.where(ilerideki_kapanis < suanki_fiyat * 0.99, 1, 0)
         df['Hedef'] = np.where(buy_target == 1, 1, np.where(sell_target == 1, 0, -1))
         
-        # ---> GİZLİ BUG ÇÖZÜMÜ: Veri kesilmeden önce mumların gerçek sırasını kaydediyoruz
+        # Gerçek sıralamayı kaydetme (Kırpma öncesi)
         tam_veri_uzunlugu = len(df)
         df['Gercek_Sira'] = range(tam_veri_uzunlugu)
         
         df = df[df['Hedef'] != -1].copy() 
         
-       # ---> FOREX GÜRÜLTÜ FİLTRESİ: Volume_Shock varsayılan listeden çıkarıldı
+        # Dinamik Feature Seçimi (Forex Filtresi)
         features = [
             'RSI', 'Price_to_EMA20', 'ATR', 'Upper_Shadow', 'Lower_Shadow', 
             'MACD_Hist', 'BB_Width', 'Price_to_BB', 'Trend_Slope'
         ]
         
-        # Sadece piyasa Forex DEĞİLSE hacim şokunu modele dahil et
         if market["category"] != "Forex":
             features.append('Volume_Shock')
         
@@ -276,31 +261,23 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
         son_20_mum = df.tail(20)
         doji_olanlar = son_20_mum[son_20_mum['Doji'] == True]
         
-        if interval == "1h":
-            min_mum, max_mum = 4, 10  
-        elif interval == "4h":
-            min_mum, max_mum = 1, 3   
-        else: 
-            min_mum, max_mum = 1, 3   
+        if interval == "1h": min_mum, max_mum = 4, 10  
+        elif interval == "4h": min_mum, max_mum = 1, 3   
+        else: min_mum, max_mum = 1, 3   
             
         olgun_dojiler = []
         if not doji_olanlar.empty:
             for idx in doji_olanlar.index:
-                # ---> DÜZELTİLMİŞ YAŞ HESABI: Orijinal sıraya göre hesaplama yapıyoruz
                 orijinal_sira = df.loc[idx, 'Gercek_Sira']
                 mum_yasi = tam_veri_uzunlugu - 1 - orijinal_sira
-                
                 if min_mum <= mum_yasi <= max_mum: 
                     olgun_dojiler.append(mum_yasi)
                     
-        # st.session_state'den okuma kaldırıldı, parametreden gelen 'is_forced' kullanılıyor
         if not olgun_dojiler and not is_forced: 
             return None 
             
-        if olgun_dojiler:
-            gecen_mum = min(olgun_dojiler) 
-        else:
-            gecen_mum = 0 
+        if olgun_dojiler: gecen_mum = min(olgun_dojiler) 
+        else: gecen_mum = 0 
             
         X = df[features].iloc[:-int(min_hours)]
         y = df['Hedef'].iloc[:-int(min_hours)]
@@ -311,21 +288,13 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
         
         if len(X) > min_required_len:
             model = xgb.XGBClassifier(
-                n_estimators=50,         
-                max_depth=3,             
-                learning_rate=0.03,      
-                subsample=0.3,           
-                colsample_bytree=0.4,    
-                reg_lambda=20.0,         
-                reg_alpha=10.0,          
-                random_state=42,
-                eval_metric='logloss',
-                n_jobs=-1
+                n_estimators=50, max_depth=3, learning_rate=0.03, subsample=0.3,
+                colsample_bytree=0.4, reg_lambda=20.0, reg_alpha=10.0,
+                random_state=42, eval_metric='logloss', n_jobs=-1
             )
             
             split_idx = int(len(X) * 0.8)
             X_train, y_train = X.iloc[:split_idx], y.iloc[:split_idx]
-            
             model.fit(X_train, y_train)
             
             doji_test_df = df.iloc[split_idx:][df.iloc[split_idx:]['Doji'] == True].iloc[:-int(min_hours)]
@@ -356,22 +325,17 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
         signal = "BUY" if tahmin_yon == 1 else "SELL"
         rsi_val = int(df['RSI'].iloc[-1])
         
-        # Doji tipi RSI'ya göre değil, alt/üst gölge uzunluklarına göre belirlenir
         upper_shadow_val = float(df['Upper_Shadow'].iloc[-1])
         lower_shadow_val = float(df['Lower_Shadow'].iloc[-1])
-        if upper_shadow_val > 0.6 and lower_shadow_val < 0.2:
-            doji_type = "Gravestone"  
-        elif lower_shadow_val > 0.6 and upper_shadow_val < 0.2:
-            doji_type = "Dragonfly"   
-        else:
-            doji_type = "Standard"    
+        if upper_shadow_val > 0.6 and lower_shadow_val < 0.2: doji_type = "Gravestone"  
+        elif lower_shadow_val > 0.6 and upper_shadow_val < 0.2: doji_type = "Dragonfly"   
+        else: doji_type = "Standard"    
+        
         big_trend = buyuk_trend_kontrol(market["symbol"])
         
-        # Geçmiş Vade Değişimi: 1h->Günlük(24 mum), 4h->Haftalık(30 mum), 1d->Haftalık(5 mum)
         _lookback = {"1h": 24, "4h": 30, "1d": 5}.get(interval, 12)
         _lookback = min(_lookback, len(df) - 1)
         
-        # --- BEARISH REBOUND TRAP PUANI (AŞIRI ALIM TUZAĞI) ---
         rebound_pct = 0.0
         if signal == "SELL" and gecen_mum > 0:
             doji_idx = len(df) - 1 - gecen_mum          
@@ -406,7 +370,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 🌐 SOL MENÜ NAVİGASYONU (SIDEBAR) ---
+# --- SOL MENÜ NAVİGASYONU (SIDEBAR) ---
 st.sidebar.markdown("""
 <div style='text-align: center; padding: 10px; border-bottom: 1px solid #1E293B; margin-bottom: 20px;'>
     <h3 style='color: #FFF; margin: 0; font-size: 16px;'>🌐 AI TERMINAL v5 (Pro)</h3>
@@ -440,7 +404,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # --- PANEL İÇERİĞİ VE GÖRSEL KUTUCUKLAR ---
-aktif_list = [] # GÜVENLİK AĞI: Hiçbir oda eşleşmese bile sistem çökmesin!
+aktif_list = []
 
 if secilen_sayfa == "🏠 Genel Dashboard":
     with st.spinner("Tüm piyasa dinamikleri sorgulanıyor..."):
@@ -453,7 +417,6 @@ if secilen_sayfa == "🏠 Genel Dashboard":
         n_bar_color = "#EF4444" if "Kapalı" in n_hac else ("#10B981" if "Güçlü" in n_hac else "#94A3B8")
         e_bar_color = "#EF4444" if "Kapalı" in e_hac else ("#10B981" if "Güçlü" in e_hac else "#94A3B8")
         
-        # Piyasaların durumunu akıllı fonksiyondan alıyoruz
         p_durum = dinamik_piyasa_durumu()
 
     fng_cols = st.columns(3)
@@ -504,7 +467,6 @@ elif secilen_sayfa == "💱 Forex Terminali":
     with st.spinner("Forex (Döviz) verileri analiz ediliyor..."):
         f_vol, f_vol_clr, f_hac = get_real_market_dynamics(["EURUSD=X"])
         
-        # --- FOREX HACİM DÜZELTMESİ ---
         if "Veri Yok" in f_hac:
             f_hac = "Merkeziyetsiz Hacim 🌐"
             f_bar_color = "#3B82F6" 
@@ -594,8 +556,6 @@ if st.session_state.chart_open:
     st.markdown("---")
 
 # --- GELİŞMİŞ TARAMA BUTONU VE İLERLEME ÇUBUĞU (ASENKRON MOTOR) ---
-
-# 1. DÜZELTME: Emoji ayrıştırma hatasını çözen güvenli metot
 sayfa_adi_temiz = secilen_sayfa.split(' ', 1)[-1]
 
 if st.button(f"🚀 {sayfa_adi_temiz} İçin Canlı AI Taraması Başlat"):
@@ -607,23 +567,16 @@ if st.button(f"🚀 {sayfa_adi_temiz} İçin Canlı AI Taraması Başlat"):
     toplam_varlik = len(aktif_list)
     tamamlanan = 0
     
-    # 2. DÜZELTME (THREAD GÜVENLİĞİ): State'i arka plan işlemlerinden (thread) önce güvenli bir şekilde okuyoruz.
     aktif_forced_state = "force_past" in st.session_state and st.session_state.force_past
     
-    # Çoklu işlem için yardımcı fonksiyon
     def piyasa_isle(m):
-        # aktif_forced_state'i artık parametre olarak analiz_et_safe fonksiyonuna gönderiyoruz
         return m, analiz_et_safe(m, global_min_hours, global_interval, global_doji_modu, aktif_forced_state)
 
-    # Aynı anda maksimum 10 işlem (iş parçacığı) çalıştır
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-        # Tüm görevleri havuza at ve aynı anda başlat
         gelecek_gorevler = [executor.submit(piyasa_isle, m) for m in aktif_list]
         
-        # Görevler tamamlandıkça (asenkron olarak) sonuçları topla
         for future in concurrent.futures.as_completed(gelecek_gorevler):
             m_data, analiz_sonucu = future.result()
-            
             if analiz_sonucu: 
                 yeni_sonuclar[m_data["symbol"]] = {"market": m_data, "result": analiz_sonucu}
                 
@@ -651,7 +604,6 @@ else:
         m, r = data["market"], data["result"]
         is_buy = r["signal"] == "BUY"
         
-        # Trend Uyum Mantığı
         is_confluence = (is_buy and r["bigTrend"] == "Boğa (Yukarı)") or (not is_buy and r["bigTrend"] == "Ayı (Aşağı)")
         confluence_text = "🔥 Trend Uyumlu" if is_confluence else "⚠️ Trend Tersi Riskli"
         
@@ -659,12 +611,10 @@ else:
             col1, col2, col3 = st.columns([2, 1, 1])
             
             with col1:
-                # Sinyal Başlığı
                 st.subheader(f"{m['name']}  :{'green' if is_buy else 'red'}[{r['signal']}]")
                 st.write(f"⏳ **Doji Yaşı:** {r['hoursAgo']} Mum Önce ({r['dojiType']} Doji)")
                 st.caption(f"**Büyük Trend (4h):** {r['bigTrend']} | {confluence_text}")
                 
-                # --- BEARISH REBOUND TRAP (Aşırı Alım Tuzağı) ---
                 if not is_buy:
                     rb = r.get("reboundPct", 0.0)
                     if rb >= 2.0:
@@ -676,7 +626,6 @@ else:
                     elif rb > 0:
                         st.success(f"💤 Zayıf Tepe Fırsatı (+%{rb:.2f})")
                 
-                # Karar Etkenleri (Feature Importances)
                 if "topFeatures" in r and r["topFeatures"]:
                     feat_str = " • ".join([f"{k}: %{v:.1f}" for k, v in r["topFeatures"].items()])
                     st.caption(f"🧠 **Karar Etkenleri:** {feat_str}")
