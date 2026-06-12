@@ -602,14 +602,15 @@ else:
             col1, col2, col3 = st.columns([2, 1, 1])
             
             with col1:
-                # BUY/SELL Sinyali
+                # Sinyal ve Doji konumu burada:
                 st.subheader(f"{m['name']}  :orange[{r['signal']}]")
+                st.write(f"⏳ **Doji Yaşı:** {r['hoursAgo']} mum önce oluştu")
                 
-                # Rozet mantığı (Sadece SELL ve pozitif değişim varsa)
+                # Rozet mantığı
                 if not is_buy and r['change'] > 0:
                     st.success(f"🎣 Tepe Fırsatı (+%{r['change']:.2f})", icon="📈")
                 
-                st.caption(f"Doji: {r['dojiType']} | Trend: {r['bigTrend']}")
+                st.caption(f"Doji Tipi: {r['dojiType']} | Büyük Trend: {r['bigTrend']}")
             
             with col2:
                 st.metric("Güven", f"%{r['confidence']}")
