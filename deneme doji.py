@@ -292,13 +292,13 @@ def analiz_et_safe(market, min_hours, interval, doji_modu):
         
         if len(X) > min_required_len:
             model = xgb.XGBClassifier(
-                n_estimators=100,
-                max_depth=2,             
-                learning_rate=0.05,
-                subsample=0.6,           
-                colsample_bytree=0.6,    
-                reg_lambda=5.0,          
-                reg_alpha=2.0,           
+                n_estimators=50,         # Ağaç sayısını düşürdük (ezberlemeyi azaltır)
+                max_depth=3,             # Daha basit düşünmeye zorlar (büyük resmi görmesi için)
+                learning_rate=0.03,      # Daha yavaş, sindirerek öğrenir
+                subsample=0.3,           # Geçmiş verinin sadece %30'una bak (Kör nokta yaratıp ezberi bozar)
+                colsample_bytree=0.4,    # Sadece belli indikatörlere saplanıp kalmasını engeller
+                reg_lambda=20.0,         # L2 Cezası: Abartılı güven oranlarını (ör. %95) acımasızca düşürür
+                reg_alpha=10.0,          # L1 Cezası: Önemsiz detayları çöpe atar
                 random_state=42,
                 eval_metric='logloss',
                 n_jobs=-1
