@@ -191,19 +191,34 @@ def analiz_et_safe(market, min_hours, interval):
             'Trend_Slope': 'Trend Eğimi'
         }
         
-        # --- OLGUNLAŞMIŞ DOJI MANTIĞI (4-5 saat önce oluşanlar) ---
+        # --- ZAMAN DİLİMİNE GÖRE AKILLI DOJI MANTIĞI ---
         son_20_mum = df.tail(20)
         doji_olanlar = son_20_mum[son_20_mum['Doji'] == True]
         
-        is_forced = "force_past" in st.session_state and st.session_state.force_past
-        
+        # Arkadaşının mantığına göre zamanı otomatik ayarla:
+        if interval == "1h":
+            min_mum, max_mum = 4, 10  # 1 saatlik grafikte 4-10 saat bekle
+        elif interval == "4h":
+            min_mum, max_mum = 1, 3   # 4 saatlik grafikte 4-12 saat bekle
+        else: # "1d"
+            min_mum, max_mum = 1, 3   # Günlükte 1-3 gün bekle
+            
         olgun_dojiler = []
         if not doji_olanlar.empty:
             for idx in doji_olanlar.index:
-                mum_yasi = len(df) - 1 - np.where(df.index == idx)[0][0]
-                # Sadece üzerinden 4 ile 10 mum arası geçmiş olanları kabul et
-                if 4 <= mum_yasi <= 10: 
+                mum_yasi = len(df) - 1 - df.index.get_loc(idx)
+                if min_mum <= mum_yasi <= max_mum: 
                     olgun_dojiler.append(mum_yasi)
+                    
+        is_forced = "force_past" in st.session_state and st.session_state.force_past
+        
+        if not olgun_dojiler and not is_forced: 
+            return None # İstenen yaşta Doji yoksa pas geç
+            
+        if olgun_dojiler:
+            gecen_mum = min(olgun_dojiler) # Şarta uyan en yeni mumu al
+        else:
+            gecen_mum = 0 # Test modu için varsayılan
         
         # Eğer 4-10 mum önce oluşmuş bir Doji YOKSA, pas geç (0, 1, 2, 3 mumlukları istemiyoruz)
         if not olgun_dojiler and not is_forced:
