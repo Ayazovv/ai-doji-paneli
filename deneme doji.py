@@ -617,86 +617,49 @@ valid_signals = dict(
 )
 
 if not valid_signals:
-    st.markdown("""<div style="background:#0F172A; border:1px solid #1E293B; border-radius:12px; padding:35px; text-align:center; margin-top:10px;"><p style="color:#64748B; font-weight:600; margin:0;">No active Doji signal matching your criteria found in this room.</p><p style="color:#475569; font-size:11px; margin:4px 0 0 0;">Sol men•den 'Remove Time Filter' se•ene•ini aktif ederek ge•mi•teki son mumu ekrana zorlayabilirsiniz.</p></div>""", unsafe_allow_html=True)
+    st.info("Bu odada şu an uygun bir Doji sinyali bulunmuyor.")
 else:
     for sym, data in valid_signals.items():
         m, r = data["market"], data["result"]
         is_buy = r["signal"] == "BUY"
-        border_color = "#34D399" if is_buy else "#F87171"
-        badge_bg = "rgba(52, 211, 153, 0.1)" if is_buy else "rgba(248, 113, 113, 0.1)"
-        text_color = '#4ADE80' if r['change'] >= 0 else '#F87171'
-        plus_sign = '+' if r['change'] >= 0 else ''
+        
+        # Trend Uyum Mantığı
         is_confluence = (is_buy and r["bigTrend"] == "Bull (Up)") or (not is_buy and r["bigTrend"] == "Bear (Down)")
+        confluence_text = "🔥 Trend Aligned" if is_confluence else "⚠️ Counter-Trend Risk"
         
-        confluence_badge = '<span style="background:rgba(52,211,153,0.2); border:1px solid #34D399; color:#34D399; padding:3px 10px; border-radius:6px; font-weight:800;">📊 Trend Aligned</span>' if is_confluence else '<span style="background:rgba(239,68,68,0.1); border:1px solid #EF4444; color:#EF4444; padding:3px 10px; border-radius:6px; font-weight:800;">📊 Counter-Trend Risk</span>'
-        
-        # --- BEARISH REBOUND TRAP BADGE (only for SELL signals) ---
-        rebound_badge = ""
-        if not is_buy:
-            rb = r.get("reboundPct", 0.0)
-            if rb >= 2.0:
-                rb_label = "📊 Extreme Rebound Trap"
-                rb_color = "#EF4444"
-                rb_bg    = "rgba(239,68,68,0.15)"
-            elif rb >= 1.0:
-                rb_label = "📊 Strong Rebound Trap"
-                rb_color = "#F97316"
-                rb_bg    = "rgba(249,115,22,0.15)"
-            elif rb >= 0.4:
-                rb_label = "📊 Mild Rebound"
-                rb_color = "#FBBF24"
-                rb_bg    = "rgba(251,191,36,0.12)"
-            else:
-                rb_label = "📊 Low Rebound"
-                rb_color = "#94A3B8"
-                rb_bg    = "rgba(148,163,184,0.1)"
-            rebound_badge = (
-                f'<span style="background:{rb_bg}; border:1px solid {rb_color}; ' 
-                f'color:{rb_color}; padding:3px 10px; border-radius:6px; font-weight:800;" ' 
-                f'title="Price bounced {rb:.2f}% above bearish doji close - higher = stronger SELL">' 
-                f'{rb_label} +{rb:.2f}%</span>'
-            )
-        
-        # Karar etkenlerini (Feature Importance) HTML badge'lere d•n📊t•r
-        feat_html = ""
-        if "topFeatures" in r and r["topFeatures"]:
-            feat_html = " ".join([f"<span style='background:#1E293B; border:1px solid #334155; padding:3px 8px; border-radius:6px; font-size:11px; color:#CBD5E1;'>📊 {k}: <b>%{v:.1f}</b></span>" for k, v in r["topFeatures"].items()])
-            feat_html = f"<div style='margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center;'><span style='color: #64748B; font-size: 11px; font-weight: 600;'>Decision Factors:</span> {feat_html}</div>"
+        with st.container(border=True):
+            col1, col2, col3 = st.columns([2, 1, 1])
+            
+            with col1:
+                # Sinyal Başlığı
+                st.subheader(f"{m['name']}  :{'green' if is_buy else 'red'}[{r['signal']}]")
+                st.write(f"⏳ **Time since Doji:** {r['hoursAgo']} Candle(s) ({r['dojiType']} Doji)")
+                st.caption(f"**Trend (4h):** {r['bigTrend']} | {confluence_text}")
+                
+                # --- BEARISH REBOUND TRAP (Native Streamlit ile) ---
+                if not is_buy:
+                    rb = r.get("reboundPct", 0.0)
+                    if rb >= 2.0:
+                        st.error(f"🚨 Extreme Rebound Trap (+{rb:.2f}%) - Güçlü Satış Fırsatı")
+                    elif rb >= 1.0:
+                        st.warning(f"🔥 Strong Rebound Trap (+{rb:.2f}%)")
+                    elif rb >= 0.4:
+                        st.info(f"⚠️ Mild Rebound (+{rb:.2f}%)")
+                    elif rb > 0:
+                        st.success(f"💤 Low Rebound (+{rb:.2f}%)")
+                
+                # Karar Etkenleri (Feature Importances)
+                if "topFeatures" in r and r["topFeatures"]:
+                    feat_str = " • ".join([f"{k}: %{v:.1f}" for k, v in r["topFeatures"].items()])
+                    st.caption(f"🧠 **Decision Factors:** {feat_str}")
 
-        html_card = """
-        <div style="background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%); border: 1px solid #1E293B; border-left: 5px solid {b_color}; border-radius: 10px; padding: 15px; margin-bottom: 12px;">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div style="flex: 1;">
-                    <strong style="color: #F1F5F9; font-size: 16px;">{m_name}</strong>
-                    <span style="background: #020817; border: 1px solid #334155; color: #64748B; font-size: 11px; padding: 2px 6px; border-radius: 4px; margin-left: 8px;">{m_cat}</span>
-                    <div style="color: #94A3B8; font-size: 13px; margin-top: 4px;">
-                        • <b>Time since Doji: {h_ago} Mum</b> ({d_type} Doji) • <span style="color: #CBD5E1;">Major Trend (4h): <b>{b_trend}</b></span>
-                    </div>
-                    <div style="margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-                        <span style="background: {b_bg}; border: 1px solid {b_color}; color: {b_color}; padding: 3px 10px; border-radius: 6px; font-weight: 700;">{sig}</span>
-                        {conf_badge}
-                        {rebound_badge}
-                        <span style="background: #020817; border: 1px solid #1E293B; color: #94A3B8; padding: 3px 10px; border-radius: 6px;">Forecast Confidence: %{conf}</span>
-                        <span style="background: #1E293B; border: 1px solid #F59E0B; color: #F59E0B; padding: 3px 10px; border-radius: 6px; font-weight: 600;">📊 AI Historical Win-Rate: %{w_rate}</span>
-                    </div>
-                    {features}
-                </div>
-                <div style="text-align: right; padding-left: 15px;">
-                    <div style="color: #F1F5F9; font-weight: 700; font-size: 18px; font-family: monospace;">${price:,.2f}</div>
-                    <div style="color: {t_color}; font-size: 12px; font-family: monospace;">{p_sign}{change:.2f}%</div>
-                </div>
-            </div>
-        </div>
-        """.format(
-            b_color=border_color, m_name=m['name'], m_cat=m['category'], h_ago=r['hoursAgo'],
-            d_type=r['dojiType'], b_trend=r['bigTrend'], b_bg=badge_bg, sig=r['signal'],
-            conf_badge=confluence_badge, conf=r['confidence'], w_rate=r['winRate'],
-            price=r['price'], t_color=text_color, p_sign=plus_sign, change=r['change'],
-            features=feat_html,
-            rebound_badge=rebound_badge
-        )
-        st.markdown(html_card, unsafe_allow_html=True)
-        
-        if st.button("📊 {} Chart View".format(m['name']), key="chart_btn_{}_{}".format(m['symbol'], m['category'])):
-            st.session_state.chart_open = m
-            st.rerun()
+            with col2:
+                st.metric("Forecast Confidence", f"%{int(r['confidence'])}")
+                st.metric("Historical Win-Rate", f"%{int(r['winRate'])}")
+                
+            with col3:
+                st.metric("Current Price", f"${r['price']:,.2f}", f"{r['change']:.2f}%")
+                
+            if st.button(f"📊 {m['name']} Chart View", key=f"chart_btn_{m['symbol']}_{m['category']}"):
+                st.session_state.chart_open = m
+                st.rerun()
