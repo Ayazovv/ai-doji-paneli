@@ -87,6 +87,14 @@ def get_real_market_dynamics(symbols):
     except:
         return "Normal 📊", "#F59E0B", "Normal 📈"
 
+def dinamik_piyasa_durumu():
+    # 0: Pazartesi ... 4: Cuma, 5: Cumartesi, 6: Pazar
+    gun = datetime.now(timezone.utc).weekday()
+    if gun >= 5:
+        return "Hafta Sonu Kapalı 💤"
+    else:
+        return "Açık / İşlem Görüyor 🟢"
+
 def piyasa_rejimi_hesapla(symbol):
     try:
         df = veri_indir(symbol, "60d", "1d")
@@ -352,6 +360,11 @@ if secilen_sayfa == "🏠 Genel Dashboard":
         c_hac = "Güçlü 💰" if c_val > 55 else "Zayıf 📉"
         n_bar_color = "#EF4444" if "Kapalı" in n_hac else ("#10B981" if "Güçlü" in n_hac else "#94A3B8")
         e_bar_color = "#EF4444" if "Kapalı" in e_hac else ("#10B981" if "Güçlü" in e_hac else "#94A3B8")
+        
+        # --- ZAMAN KONTROLÜ BURAYA EKLENDİ ---
+        from datetime import datetime, timezone
+        gun = datetime.now(timezone.utc).weekday()
+        p_durum = "Hafta Sonu Kapalı 💤" if gun >= 5 else "Açık / İşlem Görüyor 🟢"
 
     fng_cols = st.columns(3)
     with fng_cols[0]:
@@ -368,8 +381,8 @@ if secilen_sayfa == "🏠 Genel Dashboard":
             <div style="font-size:11px; font-weight:700; color:#64748B; margin-bottom:6px;">🇺🇸 ABD BORSALARI (NASDAQ)</div>
             <div style="background:#1E293B; height:6px; border-radius:3px; overflow:hidden; margin-bottom:8px;"><div style="background:{b_clr}; width:100%; height:6px;"></div></div>
             <div style="color:{b_clr}; font-weight:800; font-size:13px; text-align:right; margin-bottom:6px;">{hac}</div>
-            <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748B; border-top:1px solid rgba(51,65,85,0.3); padding-top:4px;"><span>⚡ Vol: <b style="color:{v_clr};">{vol}</b></span><span>💵 Durum: <b style="color:#FFF;">Hafta Sonu</b></span></div>
-        </div>""".format(b_clr=n_bar_color, hac=n_hac, v_clr=n_vol_clr, vol=n_vol)
+            <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748B; border-top:1px solid rgba(51,65,85,0.3); padding-top:4px;"><span>⚡ Vol: <b style="color:{v_clr};">{vol}</b></span><span>💵 Durum: <b style="color:#FFF;">{durum}</b></span></div>
+        </div>""".format(b_clr=n_bar_color, hac=n_hac, v_clr=n_vol_clr, vol=n_vol, durum=p_durum)
         st.markdown(html_n, unsafe_allow_html=True)
         
     with fng_cols[2]:
@@ -377,8 +390,8 @@ if secilen_sayfa == "🏠 Genel Dashboard":
             <div style="font-size:11px; font-weight:700; color:#64748B; margin-bottom:6px;">👑 EMTİA PİYASASI (ALTIN/GÜMÜŞ)</div>
             <div style="background:#1E293B; height:6px; border-radius:3px; overflow:hidden; margin-bottom:8px;"><div style="background:{b_clr}; width:100%; height:6px;"></div></div>
             <div style="color:{b_clr}; font-weight:800; font-size:13px; text-align:right; margin-bottom:6px;">{hac}</div>
-            <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748B; border-top:1px solid rgba(51,65,85,0.3); padding-top:4px;"><span>⚡ Vol: <b style="color:{v_clr};">{vol}</b></span><span>💵 Durum: <b style="color:#FFF;">Hafta Sonu</b></span></div>
-        </div>""".format(b_clr=e_bar_color, hac=e_hac, v_clr=e_vol_clr, vol=e_vol)
+            <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748B; border-top:1px solid rgba(51,65,85,0.3); padding-top:4px;"><span>⚡ Vol: <b style="color:{v_clr};">{vol}</b></span><span>💵 Durum: <b style="color:#FFF;">{durum}</b></span></div>
+        </div>""".format(b_clr=e_bar_color, hac=e_hac, v_clr=e_vol_clr, vol=e_vol, durum=p_durum)
         st.markdown(html_e, unsafe_allow_html=True)
         
     aktif_list = MARKETS
@@ -414,15 +427,16 @@ elif secilen_sayfa == "🇺🇸 NASDAQ Terminali":
     with st.spinner("NASDAQ dinamikleri hesaplanıyor..."):
         n_vol, n_vol_clr, n_hac = get_real_market_dynamics(["AAPL", "TSLA", "NVDA", "MSFT"])
         n_bar_color = "#EF4444" if "Kapalı" in n_hac else ("#10B981" if "Güçlü" in n_hac else "#94A3B8")
+        p_durum = dinamik_piyasa_durumu()
         
     html_single_n = """<div style="background:#0F172A; border:1px solid #1E293B; padding:15px; border-radius:8px; margin-bottom:20px;">
         <div style="font-size:12px; font-weight:700; color:#64748B; margin-bottom:6px;">🇺🇸 ABD TEKNOLOJİ BORSASI DİNAMİKLERİ (NASDAQ)</div>
         <div style="background:#1E293B; height:8px; border-radius:4px; overflow:hidden; margin-bottom:10px;"><div style="background:{b_clr}; width:100%; height:8px;"></div></div>
         <div style="display:flex; justify-content:space-between; align-items:center;">
-            <div style="font-size:12px; color:#94A3B8;">⚡ Volatilite (ATR Oranı): <b style="color:{v_clr};">{vol}</b> • 💵 Durum: <b style="color:#FFF;">Hafta Sonu Kapanışı</b></div>
+            <div style="font-size:12px; color:#94A3B8;">⚡ Volatilite (ATR Oranı): <b style="color:{v_clr};">{vol}</b> • 💵 Durum: <b style="color:#FFF;">{durum}</b></div>
             <div style="color:{b_clr}; font-weight:800; font-size:15px;">{hac}</div>
         </div>
-    </div>""".format(b_clr=n_bar_color, v_clr=n_vol_clr, vol=n_vol, hac=n_hac)
+    </div>""".format(b_clr=n_bar_color, v_clr=n_vol_clr, vol=n_vol, hac=n_hac, durum=p_durum)
     st.markdown(html_single_n, unsafe_allow_html=True)
     
     aktif_list = [m for m in MARKETS if m["category"] == "NASDAQ"]
@@ -431,15 +445,16 @@ elif secilen_sayfa == "👑 Emtia Terminali":
     with st.spinner("Emtia verileri analiz ediliyor..."):
         e_vol, e_vol_clr, e_hac = get_real_market_dynamics(["GC=F", "SI=F"])
         e_bar_color = "#EF4444" if "Kapalı" in e_hac else ("#10B981" if "Güçlü" in e_hac else "#94A3B8")
+        p_durum = dinamik_piyasa_durumu()
         
     html_single_e = """<div style="background:#0F172A; border:1px solid #1E293B; padding:15px; border-radius:8px; margin-bottom:20px;">
         <div style="font-size:12px; font-weight:700; color:#64748B; margin-bottom:6px;">👑 DEĞERLİ METAL PİYASA PSİKOLOJİSİ (ALTIN/GÜMÜŞ)</div>
         <div style="background:#1E293B; height:8px; border-radius:4px; overflow:hidden; margin-bottom:10px;"><div style="background:{b_clr}; width:100%; height:8px;"></div></div>
         <div style="display:flex; justify-content:space-between; align-items:center;">
-            <div style="font-size:12px; color:#94A3B8;">⚡ Volatilite (ATR): <b style="color:{v_clr};">{vol}</b> • 💵 Durum: <b style="color:#FFF;">Hafta Sonu Kapanışı</b></div>
+            <div style="font-size:12px; color:#94A3B8;">⚡ Volatilite (ATR): <b style="color:{v_clr};">{vol}</b> • 💵 Durum: <b style="color:#FFF;">{durum}</b></div>
             <div style="color:{b_clr}; font-weight:800; font-size:15px;">{hac}</div>
         </div>
-    </div>""".format(b_clr=e_bar_color, v_clr=e_vol_clr, vol=e_vol, hac=e_hac)
+    </div>""".format(b_clr=e_bar_color, v_clr=e_vol_clr, vol=e_vol, hac=e_hac, durum=p_durum)
     st.markdown(html_single_e, unsafe_allow_html=True)
     
     aktif_list = [m for m in MARKETS if m["category"] == "Emtia"]
