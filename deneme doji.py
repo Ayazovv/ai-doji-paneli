@@ -379,7 +379,7 @@ secilen_sayfa = st.sidebar.radio(
 st.sidebar.markdown("---")
 st.sidebar.subheader("🎛️ Küresel Filtreler")
 global_interval = st.sidebar.selectbox("⏳ Zaman Dilimi (Periyot)", ["1h", "4h", "1d"], index=0)
-global_min_hours = st.sidebar.slider("🎯 AI Tahmin Süresi (Mum)", 1, 12, 4)
+global_min_hours = st.sidebar.slider("🎯 AI Gelecek Vadesi (İleri Mum)", 1, 12, 4)
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("🛠️ Sistem Test Modu")
