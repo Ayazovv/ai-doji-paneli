@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AI Doji Terminali - v5 (Pro XGBoost & Tam Arayüz)
+AI Doji Terminali - v5 (Pro XGBoost, Cache & Tam Arayüz)
 """
 
 import streamlit as st
@@ -11,10 +11,13 @@ import requests
 from datetime import datetime, timezone
 import xgboost as xgb
 
-
-
 # --- SAYFA AYARLARI ---
 st.set_page_config(page_title="AI Doji Terminali", layout="wide", initial_sidebar_state="auto")
+
+# --- HIZLANDIRICI: CACHE (ÖNBELLEK) FONKSİYONU ---
+@st.cache_data(ttl=300) 
+def veri_indir(symbol, periyot, interval):
+    return yf.download(symbol, period=periyot, interval=interval, progress=False)
 
 # --- GLOBAL PİYASA TANIMLARI ---
 MARKETS = [
@@ -52,7 +55,7 @@ def get_real_market_dynamics(symbols):
         vol_ratios = []
         vol_counts = 0
         for sym in symbols:
-            df = yf.download(sym, period="30d", interval="1d", progress=False)
+            df = veri_indir(sym, "30d", "1d")
             if df.empty or len(df) < 20: continue
             if isinstance(df.columns, pd.MultiIndex):
                 df.columns = df.columns.get_level_values(0)
@@ -86,7 +89,7 @@ def get_real_market_dynamics(symbols):
 
 def piyasa_rejimi_hesapla(symbol):
     try:
-        df = yf.download(symbol, period="60d", interval="1d", progress=False)
+        df = veri_indir(symbol, "60d", "1d")
         if df.empty: return "Veri Yok", "#334155"
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
@@ -112,7 +115,7 @@ def piyasa_rejimi_hesapla(symbol):
 
 def buyuk_trend_kontrol(symbol):
     try:
-        df_big = yf.download(symbol, period="60d", interval="4h", progress=False)
+        df_big = veri_indir(symbol, "60d", "4h")
         if df_big.empty: return "Yansız"
         if isinstance(df_big.columns, pd.MultiIndex):
             df_big.columns = df_big.columns.get_level_values(0)
@@ -129,14 +132,15 @@ def analiz_et_safe(market, min_hours, interval):
         elif interval == "4h": periyot = "6mo"
         else: periyot = "2y"
         
-        df = yf.download(market["symbol"], period=periyot, interval=interval, progress=False)
+        df = veri_indir(market["symbol"], periyot, interval)
         if df.empty: return None
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
             
+        # DOJİ HESAPLAMASI (Hassasiyet %30'a çıkarıldı, yakalaması çok daha kolay)
         govde = abs(df['Open'] - df['Close'])
         toplam_boy = df['High'] - df['Low']
-        df['Doji'] = govde <= (toplam_boy * 0.1)
+        df['Doji'] = govde <= (toplam_boy * 0.3)
         
         delta = df['Close'].diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
@@ -180,7 +184,6 @@ def analiz_et_safe(market, min_hours, interval):
             'Volume_Shock', 'MACD_Hist', 'BB_Width', 'Price_to_BB', 'Trend_Slope'
         ]
         
-        # Arayüz için okunaklı özellik isimleri çevirisi
         feature_names_tr = {
             'RSI': 'RSI (Aşırılık)', 'Price_to_EMA20': 'Trend Uzaklığı', 'ATR': 'Volatilite',
             'Upper_Shadow': 'Üst Gölge', 'Lower_Shadow': 'Alt Gölge', 'Volume_Shock': 'Hacim Şoku',
@@ -188,47 +191,45 @@ def analiz_et_safe(market, min_hours, interval):
             'Trend_Slope': 'Trend Eğimi'
         }
         
-        # --- YENİ MANTIK: Son 10 muma bak, varsa en sonuncuyu al ---
-        son_10_mum = df.tail(10)
-        doji_olanlar = son_10_mum[son_10_mum['Doji'] == True]
+        # --- DOJI YAKALAMA MANTIĞI (Sadece son 20 muma bakar) ---
+        son_20_mum = df.tail(20)
+        doji_olanlar = son_20_mum[son_20_mum['Doji'] == True]
         
-        if doji_olanlar.empty: 
-            return None # Son 10 mumda hiç Doji yoksa gerçekten sinyal yoktur
+        is_forced = "force_past" in st.session_state and st.session_state.force_past
         
-        # En son oluşan Doji'yi seçiyoruz
-        en_son_doji = doji_olanlar.iloc[-1]
-        gecen_mum = len(df) - 1 - df.index.get_loc(en_son_doji.name)
-        
-        # Eğer Doji çok eskiyse (örneğin 10 mumdan eskiyse) yine de alma
-        if gecen_mum > 10: 
-            return None
+        if doji_olanlar.empty and not is_forced: 
+            return None # Son 20 mumda Doji yoksa pas geç
+            
+        if not doji_olanlar.empty:
+            en_son_doji_index = np.where(df.index == doji_olanlar.index[-1])[0][0]
+            gecen_mum = len(df) - 1 - en_son_doji_index
+        else:
+            gecen_mum = 0 # Forced mod için varsayılan
             
         X = df[özellikler].iloc[:-int(min_hours)]
         y = df['Hedef'].iloc[:-int(min_hours)]
         win_rate, toplam_sinyal = 50, 0
         en_etkili_faktorler = {}
         
-        min_required_len = 15 if is_forced else 50
+        min_required_len = 15 if is_forced else 30
         
         if len(X) > min_required_len:
-            # --- XGBOOST MODELİ (HIZLI VE KARARLI) ---
+            # --- XGBOOST MODELİ (HIZLI, KARARLI, OVERFIT ENGELLİ) ---
             model = xgb.XGBClassifier(
                 n_estimators=100,
-                max_depth=2,             # Derinliği 3'ten 2'ye düşürdük. Daha az ezber!
+                max_depth=2,             
                 learning_rate=0.05,
-                subsample=0.6,           # Verinin sadece %60'ına bak (daha fazla rastgelelik)
-                colsample_bytree=0.6,    # Özelliklerin %60'ına bak
-                reg_lambda=5.0,          # L2 Regülarizasyonu (Ezberlemeyi cezalandırır)
-                reg_alpha=2.0,           # L1 Regülarizasyonu (Gereksiz ağırlıkları sıfırlar)
+                subsample=0.6,           
+                colsample_bytree=0.6,    
+                reg_lambda=5.0,          
+                reg_alpha=2.0,           
                 random_state=42,
                 eval_metric='logloss',
                 n_jobs=-1
             )
             
-            # --- MODELİ EĞİTİYORUZ (BU SATIR ŞART!) ---
             model.fit(X, y)
             
-            # --- TEST VE TAHMİN ---
             doji_df = df[df['Doji'] == True].iloc[:-int(min_hours)]
             if not doji_df.empty:
                 X_doji = doji_df[özellikler]
@@ -239,12 +240,10 @@ def analiz_et_safe(market, min_hours, interval):
                 if toplam_sinyal > 0: 
                     win_rate = int((basarili_tahmin / toplam_sinyal) * 100)
             
-            # Güncel tahmin
             son_veri = df[özellikler].iloc[[-1]]
             tahmin_yon = model.predict(son_veri)[0]
             guven_orani = int(max(model.predict_proba(son_veri)[0]) * 100)
             
-            # Neden bu kararı verdiğini bul (Feature Importance)
             if hasattr(model, 'feature_importances_'):
                 importances = model.feature_importances_
                 sirali = sorted(zip(özellikler, importances), key=lambda x: x[1], reverse=True)
@@ -252,7 +251,6 @@ def analiz_et_safe(market, min_hours, interval):
                     if imp > 0.01:
                         en_etkili_faktorler[feature_names_tr.get(feat, feat)] = float(imp * 100)
         else:
-            # Yeterli veri yoksa basit mantık
             tahmin_yon = 1 if df['RSI'].iloc[-1] < 50 else 0
             guven_orani = 55
             
@@ -320,7 +318,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- PANEL İÇERİĞİ VE GÖRSEL KUTUCUKLAR (TAMAMI EKLENDİ) ---
+# --- PANEL İÇERİĞİ VE GÖRSEL KUTUCUKLAR ---
 if secilen_sayfa == "🏠 Genel Dashboard":
     with st.spinner("Tüm piyasa dinamikleri sorgulanıyor..."):
         c_val, c_status, c_color = get_crypto_fng()
