@@ -165,7 +165,7 @@ def buyuk_trend_kontrol(symbol):
     except:
         return "Yansız"
 
-def analiz_et_safe(market, min_hours, interval, doji_modu):
+def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
     try:
         if interval == "1h": periyot = "6mo" 
         elif interval == "4h": periyot = "2y"
@@ -232,7 +232,8 @@ def analiz_et_safe(market, min_hours, interval, doji_modu):
         df = df.dropna()
         suanki_fiyat = df['Close']
         ilerideki_kapanis = df['Close'].shift(-int(min_hours))
-        ilerideki_min = df['Low'].shift(-int(min_hours)).rolling(window=int(min_hours)).min()
+        indexer = pd.api.indexers.FixedForwardWindowIndexer(window_size=int(min_hours))
+        ilerideki_min = df['Low'].shift(-1).rolling(window=indexer).min()
         
         # BUY Hedefi: Gelecekteki kapanış %1 yukarıda VEYA stop seviyesi kırılmamışsa
         buy_target = np.where(
@@ -245,14 +246,25 @@ def analiz_et_safe(market, min_hours, interval, doji_modu):
             ilerideki_kapanis < suanki_fiyat * 0.99,
             1, 0
         )
+        
         # Final Hedef: BUY=1, SELL=0, Kararsız=-1 (Kararsız mumlar veriden temizlenir)
         df['Hedef'] = np.where(buy_target == 1, 1, np.where(sell_target == 1, 0, -1))
+        
+        # ---> GİZLİ BUG ÇÖZÜMÜ: Veri kesilmeden önce mumların gerçek sırasını kaydediyoruz
+        tam_veri_uzunlugu = len(df)
+        df['Gercek_Sira'] = range(tam_veri_uzunlugu)
+        
         df = df[df['Hedef'] != -1].copy() 
         
+       # ---> FOREX GÜRÜLTÜ FİLTRESİ: Volume_Shock varsayılan listeden çıkarıldı
         features = [
             'RSI', 'Price_to_EMA20', 'ATR', 'Upper_Shadow', 'Lower_Shadow', 
-            'Volume_Shock', 'MACD_Hist', 'BB_Width', 'Price_to_BB', 'Trend_Slope'
+            'MACD_Hist', 'BB_Width', 'Price_to_BB', 'Trend_Slope'
         ]
+        
+        # Sadece piyasa Forex DEĞİLSE hacim şokunu modele dahil et
+        if market["category"] != "Forex":
+            features.append('Volume_Shock')
         
         feature_names_tr = {
             'RSI': 'RSI (Aşırılık)', 'Price_to_EMA20': 'Trend Uzaklığı', 'ATR': 'Volatilite',
@@ -274,12 +286,14 @@ def analiz_et_safe(market, min_hours, interval, doji_modu):
         olgun_dojiler = []
         if not doji_olanlar.empty:
             for idx in doji_olanlar.index:
-                mum_yasi = len(df) - 1 - df.index.get_loc(idx)
+                # ---> DÜZELTİLMİŞ YAŞ HESABI: Orijinal sıraya göre hesaplama yapıyoruz
+                orijinal_sira = df.loc[idx, 'Gercek_Sira']
+                mum_yasi = tam_veri_uzunlugu - 1 - orijinal_sira
+                
                 if min_mum <= mum_yasi <= max_mum: 
                     olgun_dojiler.append(mum_yasi)
                     
-        is_forced = "force_past" in st.session_state and st.session_state.force_past
-        
+        # st.session_state'den okuma kaldırıldı, parametreden gelen 'is_forced' kullanılıyor
         if not olgun_dojiler and not is_forced: 
             return None 
             
@@ -297,13 +311,13 @@ def analiz_et_safe(market, min_hours, interval, doji_modu):
         
         if len(X) > min_required_len:
             model = xgb.XGBClassifier(
-                n_estimators=50,         # Ağaç sayısını düşürdük (ezberlemeyi azaltır)
-                max_depth=3,             # Daha basit düşünmeye zorlar (büyük resmi görmesi için)
-                learning_rate=0.03,      # Daha yavaş, sindirerek öğrenir
-                subsample=0.3,           # Geçmiş verinin sadece %30'una bak (Kör nokta yaratıp ezberi bozar)
-                colsample_bytree=0.4,    # Sadece belli indikatörlere saplanıp kalmasını engeller
-                reg_lambda=20.0,         # L2 Cezası: Abartılı güven oranlarını (ör. %95) acımasızca düşürür
-                reg_alpha=10.0,          # L1 Cezası: Önemsiz detayları çöpe atar
+                n_estimators=50,         
+                max_depth=3,             
+                learning_rate=0.03,      
+                subsample=0.3,           
+                colsample_bytree=0.4,    
+                reg_lambda=20.0,         
+                reg_alpha=10.0,          
                 random_state=42,
                 eval_metric='logloss',
                 n_jobs=-1
@@ -358,8 +372,6 @@ def analiz_et_safe(market, min_hours, interval, doji_modu):
         _lookback = min(_lookback, len(df) - 1)
         
         # --- BEARISH REBOUND TRAP PUANI (AŞIRI ALIM TUZAĞI) ---
-        # SELL sinyalleri için: Düşüş yönlü Doji sonrası fiyat ne kadar yukarı sekti?
-        # Sıçrama ne kadar yüksekse, düşüş fırsatı o kadar güçlüdür (Likidite avı).
         rebound_pct = 0.0
         if signal == "SELL" and gecen_mum > 0:
             doji_idx = len(df) - 1 - gecen_mum          
@@ -582,7 +594,11 @@ if st.session_state.chart_open:
     st.markdown("---")
 
 # --- GELİŞMİŞ TARAMA BUTONU VE İLERLEME ÇUBUĞU (ASENKRON MOTOR) ---
-if st.button("🚀 {} İçin Canlı AI Taraması Başlat".format(secilen_sayfa.split()[1])):
+
+# 1. DÜZELTME: Emoji ayrıştırma hatasını çözen güvenli metot
+sayfa_adi_temiz = secilen_sayfa.split(' ', 1)[-1]
+
+if st.button(f"🚀 {sayfa_adi_temiz} İçin Canlı AI Taraması Başlat"):
     st.info("⚡ Asenkron (Paralel) Tarama başlatıldı, piyasalar aynı anda işleniyor...")
     ilerleme_cubugu = st.progress(0)
     durum_metni = st.empty()
@@ -591,9 +607,13 @@ if st.button("🚀 {} İçin Canlı AI Taraması Başlat".format(secilen_sayfa.s
     toplam_varlik = len(aktif_list)
     tamamlanan = 0
     
+    # 2. DÜZELTME (THREAD GÜVENLİĞİ): State'i arka plan işlemlerinden (thread) önce güvenli bir şekilde okuyoruz.
+    aktif_forced_state = "force_past" in st.session_state and st.session_state.force_past
+    
     # Çoklu işlem için yardımcı fonksiyon
     def piyasa_isle(m):
-        return m, analiz_et_safe(m, global_min_hours, global_interval, global_doji_modu)
+        # aktif_forced_state'i artık parametre olarak analiz_et_safe fonksiyonuna gönderiyoruz
+        return m, analiz_et_safe(m, global_min_hours, global_interval, global_doji_modu, aktif_forced_state)
 
     # Aynı anda maksimum 10 işlem (iş parçacığı) çalıştır
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
