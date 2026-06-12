@@ -410,15 +410,20 @@ if secilen_sayfa == "🏠 Genel Dashboard":
         
     # NASDAQ Kartı
     with fng_cols[1]:
-        # NASDAQ için özel korku skorunu çağır
-        n_fng_val, n_fng_stat, n_fng_clr = get_nasdaq_fng() 
+        # NASDAQ için skor ve durum verilerini al
+        n_fng_val, n_fng_stat, n_fng_clr = get_nasdaq_fng()
+        p_durum = "Açık 🟢" if datetime.now(timezone.utc).weekday() < 5 else "Kapalı 💤"
         
         html_n = """<div style="background:#0F172A; border:1px solid #1E293B; padding:12px; border-radius:8px; min-height:110px;">
             <div style="font-size:11px; font-weight:700; color:#64748B; margin-bottom:6px;">🇺🇸 ABD BORSALARI (NASDAQ)</div>
             <div style="background:#1E293B; height:6px; border-radius:3px; overflow:hidden; margin-bottom:8px;"><div style="background:{clr}; width:{val}%; height:6px;"></div></div>
             <div style="color:{clr}; font-weight:800; font-size:13px; text-align:right; margin-bottom:6px;">{stat} ({val}/100)</div>
-            <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748B; border-top:1px solid rgba(51,65,85,0.3); padding-top:4px;"><span>⚡ Vol: <b style="color:{v_clr};">{vol}</b></span><span>💵 Hacim: <b style="color:#FFF;">{hac}</b></span></div>
-        </div>""".format(clr=n_fng_clr, val=n_fng_val, stat=n_fng_stat, v_clr=n_vol_clr, vol=n_vol, hac=n_hac)
+            <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748B; border-top:1px solid rgba(51,65,85,0.3); padding-top:4px;">
+                <span>⚡ Vol: <b style="color:{v_clr};">{vol}</b></span>
+                <span>💵 Hacim: <b style="color:#FFF;">{hac}</b></span>
+                <span>📍 <b style="color:#FFF;">{durum}</b></span>
+            </div>
+        </div>""".format(clr=n_fng_clr, val=n_fng_val, stat=n_fng_stat, v_clr=n_vol_clr, vol=n_vol, hac=n_hac, durum=p_durum)
         st.markdown(html_n, unsafe_allow_html=True)
         
     # Emtia Kartı
