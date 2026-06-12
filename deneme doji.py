@@ -618,38 +618,26 @@ else:
             feat_html = " ".join([f"<span style='background:#1E293B; border:1px solid #334155; padding:3px 8px; border-radius:6px; font-size:11px; color:#CBD5E1;'>🧠 {k}: <b>%{v:.1f}</b></span>" for k, v in r["topFeatures"].items()])
             feat_html = f"<div style='margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center;'><span style='color: #64748B; font-size: 11px; font-weight: 600;'>Karar Etkenleri:</span> {feat_html}</div>"
 
-        html_card = """
-        <div style="background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%); border: 1px solid #1E293B; border-left: 5px solid {b_color}; border-radius: 10px; padding: 15px; margin-bottom: 12px;">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div style="flex: 1;">
-                    <strong style="color: #F1F5F9; font-size: 16px;">{m_name}</strong>
-                    <span style="background: #020817; border: 1px solid #334155; color: #64748B; font-size: 11px; padding: 2px 6px; border-radius: 4px; margin-left: 8px;">{m_cat}</span>
-                    <div style="color: #94A3B8; font-size: 13px; margin-top: 4px;">
-                        ⏳ <b>Doji üzerinden geçen süre: {h_ago} Mum</b> ({d_type} Doji) • <span style="color: #CBD5E1;">Büyük Trend (4h): <b>{b_trend}</b></span>
-                    </div>
-                    <div style="margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-                        <span style="background: {b_bg}; border: 1px solid {b_color}; color: {b_color}; padding: 3px 10px; border-radius: 6px; font-weight: 700;">{sig}</span>
-                        {conf_badge}
-                        {ters_yon_badge}
-                        <span style="background: #020817; border: 1px solid #1E293B; color: #94A3B8; padding: 3px 10px; border-radius: 6px;">Tahmin Güveni: %{conf}</span>
-                        <span style="background: #1E293B; border: 1px solid #F59E0B; color: #F59E0B; padding: 3px 10px; border-radius: 6px; font-weight: 600;">🎯 AI Tarihsel Win-Rate: %{w_rate}</span>
-                    </div>
-                    {features}
-                </div>
-                <div style="text-align: right; padding-left: 15px;">
-                    <div style="color: #F1F5F9; font-weight: 700; font-size: 18px; font-family: monospace;">${price:,.2f}</div>
-                    <div style="color: {t_color}; font-size: 12px; font-family: monospace;">{p_sign}{change:.2f}%</div>
-                </div>
+        # Kart basma kısmını şu şekilde "temiz" bir yapıda tekrar dene
+html_card = f"""
+<div style="background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%); border: 1px solid #1E293B; border-left: 5px solid {border_color}; border-radius: 10px; padding: 15px; margin-bottom: 12px;">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="flex: 1;">
+            <strong style="color: #F1F5F9; font-size: 16px;">{m['name']}</strong>
+            <div style="margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap;">
+                <span style="background: {badge_bg}; border: 1px solid {border_color}; color: {border_color}; padding: 3px 10px; border-radius: 6px; font-weight: 700;">{r['signal']}</span>
+                <span style="background: #020817; border: 1px solid #1E293B; color: #94A3B8; padding: 3px 10px; border-radius: 6px;">Tahmin Güveni: %{int(r['confidence'])}</span>
+                <span style="background: #1E293B; border: 1px solid #F59E0B; color: #F59E0B; padding: 3px 10px; border-radius: 6px; font-weight: 600;">🎯 Win-Rate: %{int(r['winRate'])}</span>
             </div>
         </div>
-        """.format(
-            b_color=border_color, m_name=m['name'], m_cat=m['category'], h_ago=r['hoursAgo'],
-            d_type=r['dojiType'], b_trend=r['bigTrend'], b_bg=badge_bg, sig=r['signal'],
-            conf_badge=confluence_badge, ters_yon_badge=ters_yon_badge, conf=r['confidence'], 
-            w_rate=r['winRate'], price=r['price'], t_color=text_color, p_sign=plus_sign, 
-            change=r['change'], features=feat_html
-        )
-        st.markdown(html_card, unsafe_allow_html=True)
+        <div style="text-align: right;">
+            <div style="color: #F1F5F9; font-weight: 700;">${r['price']:,.2f}</div>
+            <div style="color: {text_color};">{plus_sign}{r['change']:.2f}%</div>
+        </div>
+    </div>
+</div>
+"""
+st.markdown(html_card, unsafe_allow_html=True)
         
         if st.button("📊 {} Grafiğini İncele".format(m['name']), key="chart_btn_{}_{}".format(m['symbol'], m['category'])):
             st.session_state.chart_open = m
