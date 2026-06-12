@@ -213,10 +213,12 @@ def analiz_et_safe(market, min_hours, interval):
             # --- XGBOOST MODELİ (HIZLI VE KARARLI) ---
             model = xgb.XGBClassifier(
                 n_estimators=100,
-                max_depth=3,
-                learning_rate=0.1,
-                subsample=0.8,
-                colsample_bytree=0.8,
+                max_depth=2,             # Derinliği 3'ten 2'ye düşürdük. Daha az ezber!
+                learning_rate=0.05,
+                subsample=0.6,           # Verinin sadece %60'ına bak (daha fazla rastgelelik)
+                colsample_bytree=0.6,    # Özelliklerin %60'ına bak
+                reg_lambda=5.0,          # L2 Regülarizasyonu (Ezberlemeyi cezalandırır)
+                reg_alpha=2.0,           # L1 Regülarizasyonu (Gereksiz ağırlıkları sıfırlar)
                 random_state=42,
                 eval_metric='logloss',
                 n_jobs=-1
