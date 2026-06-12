@@ -188,19 +188,13 @@ def analiz_et_safe(market, min_hours, interval):
             'Trend_Slope': 'Trend Eğimi'
         }
         
-        doji_satirlari = df[df['Doji'] == True]
-        if doji_satirlari.empty: return None
-        
-        son_doji_zaman = doji_satirlari.index[-1].to_pydatetime().replace(tzinfo=timezone.utc)
-        su_an = datetime.now(timezone.utc)
-        gecen_saat = round((su_an - son_doji_zaman).total_seconds() / 3600, 1)
-        saat_katsayisi = 4 if interval == "4h" else (24 if interval == "1d" else 1)
-        gecen_mum = round(gecen_saat / saat_katsayisi, 1)
-        
-        is_forced = "force_past" in st.session_state and st.session_state.force_past
-        if not is_forced:
-            if gecen_mum < min_hours or gecen_mum > (24 / saat_katsayisi): 
-                return None
+        # Sadece en son 2 muma bakıyoruz (Taze sinyal kontrolü)
+        if df['Doji'].iloc[-1]:
+            gecen_mum = 0
+        elif df['Doji'].iloc[-2]:
+            gecen_mum = 1
+        else:
+            return None # Son 2 mumda Doji yoksa, işlem yapma!
             
         X = df[özellikler].iloc[:-int(min_hours)]
         y = df['Hedef'].iloc[:-int(min_hours)]
