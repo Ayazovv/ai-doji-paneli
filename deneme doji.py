@@ -292,7 +292,7 @@ def analiz_et_safe(market, min_hours, interval, doji_modu):
                 learning_rate=0.01,       # Çok daha yavaş öğrenme (modelin daha temkinli olmasını sağlar)
                 subsample=0.4,            # Verinin sadece %40'ını gör (ezberi kırar)
                 colsample_bytree=0.4,     # Özelliklerin sadece %40'ına bak
-                reg_lambda=15.0,          # L2 cezası (ağırlıkları küçültür)
+                reg_lambda=20.0,          # L2 cezası (ağırlıkları küçültür)
                 reg_alpha=10.0,           # L1 cezası (daha basit model yaratır)
                 random_state=42,
                 eval_metric='logloss',
