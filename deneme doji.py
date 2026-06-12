@@ -116,11 +116,16 @@ def get_real_market_dynamics(symbols):
         return "Normal 📊", "#F59E0B", "Normal 📈"
 
 def dinamik_piyasa_durumu():
-    gun = datetime.now(timezone.utc).weekday()
-    if gun >= 5:
-        return "Hafta Sonu Kapalı 💤"
+    now_utc = datetime.now(timezone.utc)
+    gun = now_utc.weekday()
+    saat = now_utc.hour
+    
+    # 5=Cumartesi, 6=Pazar. 
+    # Ayrıca Cuma günü (4) UTC saatiyle 21:00'den sonra (TSİ gece 00:00) piyasalar kapanır.
+    if gun == 5 or gun == 6 or (gun == 4 and saat >= 21):
+        return "Kapalı 💤"
     else:
-        return "Açık / İşlem Görüyor 🟢"
+        return "Açık 🟢"
 
 def piyasa_rejimi_hesapla(symbol):
     try:
@@ -436,9 +441,8 @@ if secilen_sayfa == "🏠 Genel Dashboard":
         n_bar_color = "#EF4444" if "Kapalı" in n_hac else ("#10B981" if "Güçlü" in n_hac else "#94A3B8")
         e_bar_color = "#EF4444" if "Kapalı" in e_hac else ("#10B981" if "Güçlü" in e_hac else "#94A3B8")
         
-        from datetime import datetime, timezone
-        gun = datetime.now(timezone.utc).weekday()
-        p_durum = "Hafta Sonu Kapalı 💤" if gun >= 5 else "Açık / İşlem Görüyor 🟢"
+        # Piyasaların durumunu akıllı fonksiyondan alıyoruz
+        p_durum = dinamik_piyasa_durumu()
 
     fng_cols = st.columns(3)
     with fng_cols[0]:
@@ -452,7 +456,6 @@ if secilen_sayfa == "🏠 Genel Dashboard":
         
     with fng_cols[1]:
         n_fng_val, n_fng_stat, n_fng_clr = get_nasdaq_fng()
-        p_durum = "Açık 🟢" if datetime.now(timezone.utc).weekday() < 5 else "Kapalı 💤"
         
         html_n = """<div style="background:#0F172A; border:1px solid #1E293B; padding:12px; border-radius:8px; min-height:110px;">
             <div style="font-size:11px; font-weight:700; color:#64748B; margin-bottom:6px;">🇺🇸 ABD BORSALARI (NASDAQ)</div>
