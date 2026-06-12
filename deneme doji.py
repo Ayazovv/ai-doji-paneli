@@ -409,6 +409,8 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # --- PANEL İÇERİĞİ VE GÖRSEL KUTUCUKLAR ---
+aktif_list = [] # GÜVENLİK AĞI: Hiçbir oda eşleşmese bile sistem çökmesin!
+
 if secilen_sayfa == "🏠 Genel Dashboard":
     with st.spinner("Tüm piyasa dinamikleri sorgulanıyor..."):
         c_val, c_status, c_color = get_crypto_fng()
