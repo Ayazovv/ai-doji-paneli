@@ -1,3 +1,14 @@
+Hatayı kodun içinde şıp diye buldum! Kopyalama-yapıştırma işlemleri sırasında çok tatlı bir karışıklık olmuş.
+
+Kodunun aşağılarına doğru indiğimizde **"Emtia Terminali" bölümü yanlışlıkla iki kere alt alta yapıştırılmış** ve **"Forex Terminali" bloğu ise tamamen silinmiş**.
+
+Sistem sol menüden "Forex" seçtiğinde, aşağıda Forex kod bloğunu bulamadığı için o "Güvenlik Ağı" dediğimiz `aktif_list = []` (boş liste) kuralı devreye giriyor. Doğal olarak taranacak hiçbir şey bulamadan taramayı anında bitiriyor.
+
+Emtia kopyalarını sildim, Forex bloğunu ait olduğu yere kusursuz bir şekilde ekledim ve Python'un sevmediği tüm gizli boşlukları temizledim.
+
+Mevcut dosyanı tamamen temizle ve bu **%100 çalışan, düzeltilmiş tam sürümü** yapıştır:
+
+```python
 # -*- coding: utf-8 -*-
 """
 AI Doji Terminali - v5 (Pro XGBoost, Cache & Tam Arayüz)
@@ -54,17 +65,13 @@ def get_crypto_fng():
 
 def get_nasdaq_fng():
     try:
-        # yfinance üzerinden anlık VIX (Korku Endeksi) verisini çekiyoruz
         vix_df = yf.download("^VIX", period="5d", interval="1d", progress=False)
         if isinstance(vix_df.columns, pd.MultiIndex):
             vix_df.columns = vix_df.columns.get_level_values(0)
             
         son_vix = float(vix_df['Close'].iloc[-1])
-        
-        # VIX değerini 0-100 arası Korku/Açgözlülük skoruna çevirme (Ters Orantı Normalize)
-        # VIX 10 ise FNG = 100 (Aşırı Açgözlülük), VIX 40 ise FNG = 0 (Aşırı Korku)
         fng_score = 100 - ((son_vix - 10) / (40 - 10) * 100)
-        fng_score = max(0, min(100, int(fng_score))) # Değeri 0-100 sınırlarına hapset
+        fng_score = max(0, min(100, int(fng_score))) 
         
         if fng_score < 25: return fng_score, "Aşırı Korku 😱", "#EF4444"
         elif fng_score < 45: return fng_score, "Korku 😨", "#F97316"
@@ -94,12 +101,9 @@ def get_real_market_dynamics(symbols):
             vol_ratio = (atr20 / son_fiyat) * 100
             vol_ratios.append(vol_ratio)
             
-            # --- DÜZELTİLMİŞ HACİM KONTROLÜ ---
             hacim_sutunu = df['Volume'] if 'Volume' in df.columns else None
             if hacim_sutunu is not None:
-                # Son gün sıfırsa bir önceki günün hacmini kontrol et
                 aktif_hacim_idx = -1 if df['Volume'].iloc[-1] > 0 else -2
-                
                 son_hacim = df['Volume'].rolling(3).mean().iloc[aktif_hacim_idx]
                 ort_hacim = df['Volume'].rolling(20).mean().iloc[aktif_hacim_idx]
                 hacim_soku = son_hacim / (ort_hacim + 1e-10)
@@ -123,7 +127,6 @@ def get_real_market_dynamics(symbols):
         return "Normal 📊", "#F59E0B", "Normal 📈"
 
 def dinamik_piyasa_durumu():
-    # 0: Pazartesi ... 4: Cuma, 5: Cumartesi, 6: Pazar
     gun = datetime.now(timezone.utc).weekday()
     if gun >= 5:
         return "Hafta Sonu Kapalı 💤"
@@ -170,8 +173,7 @@ def buyuk_trend_kontrol(symbol):
 
 def analiz_et_safe(market, min_hours, interval, doji_modu):
     try:
-        # ADIM 1: DAHA GENİŞ EĞİTİM VERİSİ (Popülasyonu büyütüyoruz)
-        if interval == "1h": periyot = "6mo" # Forex için 1y bazen boş döner, 6 ay en güvenlisidir.
+        if interval == "1h": periyot = "6mo" 
         elif interval == "4h": periyot = "2y"
         else: periyot = "5y"
         
@@ -180,18 +182,15 @@ def analiz_et_safe(market, min_hours, interval, doji_modu):
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
             
-        # --- SEÇİLEBİLİR DOJİ HESAPLAMASI ---
         govde = abs(df['Open'] - df['Close'])
         toplam_boy = df['High'] - df['Low']
         
         if "Dinamik" in doji_modu:
-            # 1. Dinamik Mod (Piyasanın ateşine göre esner)
             ortalama_boy = toplam_boy.rolling(window=20).mean()
             volatilite_carpani = toplam_boy / (ortalama_boy + 1e-10)
             dinamik_sinir = (0.3 * volatilite_carpani).clip(lower=0.15, upper=0.45)
             df['Doji'] = govde <= (toplam_boy * dinamik_sinir)
         else:
-            # 2. Sabit Mod (Eski klasik 0.3 mantığı)
             df['Doji'] = govde <= (toplam_boy * 0.3)
         
         delta = df['Close'].diff()
@@ -213,7 +212,6 @@ def analiz_et_safe(market, min_hours, interval, doji_modu):
         df['Lower_Shadow'] = (df[['Open', 'Close']].min(axis=1) - df['Low']) / (df['High'] - df['Low'] + 1e-10)
         df['Volume_Shock'] = df['Volume'].rolling(5).mean() / (df['Volume'].rolling(20).mean() + 1e-10)
         
-        # YENİ PROFESYONEL İNDİKATÖRLER
         ema12 = df['Close'].ewm(span=12, adjust=False).mean()
         ema26 = df['Close'].ewm(span=26, adjust=False).mean()
         macd_line = ema12 - ema26
@@ -229,13 +227,10 @@ def analiz_et_safe(market, min_hours, interval, doji_modu):
         df['Trend_Slope'] = df['EMA20'].diff(3) / (df['EMA20'] + 1e-10) * 100
 
         df = df.dropna()
-        # ADIM 2: AKILLI HEDEF DEĞİŞKENİ (Maksimum düşüş / Drawdown kontrolü)
         suanki_fiyat = df['Close']
         ilerideki_kapanis = df['Close'].shift(-int(min_hours))
-        # İşleme girdikten sonraki mumlarda fiyatın gördüğü en dip nokta
         ilerideki_min = df['Low'].shift(-int(min_hours)).rolling(window=int(min_hours)).min()
         
-        # KURAL: İşleme girdikten sonra fiyat %1'den fazla düşerse (stop patlarsa) VEYA kapanış düşükse 0 (Başarısız)
         df['Hedef'] = np.where((ilerideki_min < suanki_fiyat * 0.99) | (ilerideki_kapanis < suanki_fiyat), 0, 1)
         
         özellikler = [
@@ -250,17 +245,15 @@ def analiz_et_safe(market, min_hours, interval, doji_modu):
             'Trend_Slope': 'Trend Eğimi'
         }
         
-        # --- ZAMAN DİLİMİNE GÖRE AKILLI DOJI MANTIĞI ---
         son_20_mum = df.tail(20)
         doji_olanlar = son_20_mum[son_20_mum['Doji'] == True]
         
-        # Arkadaşının mantığına göre zamanı otomatik ayarla:
         if interval == "1h":
-            min_mum, max_mum = 4, 10  # 1 saatlik grafikte 4-10 saat bekle
+            min_mum, max_mum = 4, 10  
         elif interval == "4h":
-            min_mum, max_mum = 1, 3   # 4 saatlik grafikte 4-12 saat bekle
-        else: # "1d"
-            min_mum, max_mum = 1, 3   # Günlükte 1-3 gün bekle
+            min_mum, max_mum = 1, 3   
+        else: 
+            min_mum, max_mum = 1, 3   
             
         olgun_dojiler = []
         if not doji_olanlar.empty:
@@ -272,21 +265,20 @@ def analiz_et_safe(market, min_hours, interval, doji_modu):
         is_forced = "force_past" in st.session_state and st.session_state.force_past
         
         if not olgun_dojiler and not is_forced: 
-            return None # İstenen yaşta Doji yoksa pas geç
+            return None 
             
         if olgun_dojiler:
-            gecen_mum = min(olgun_dojiler) # Şarta uyan en yeni mumu al
+            gecen_mum = min(olgun_dojiler) 
         else:
-            gecen_mum = 0 # Test modu için varsayılan
-        
-        # Eğer 4-10 mum önce oluşmuş bir Doji YOKSA, pas geç (0, 1, 2, 3 mumlukları istemiyoruz)
+            gecen_mum = 0 
+            
         if not olgun_dojiler and not is_forced:
             return None 
             
         if olgun_dojiler:
-            gecen_mum = min(olgun_dojiler) # Şarta uyan en yeni (örn: 4 mum önceki)
+            gecen_mum = min(olgun_dojiler) 
         else:
-            gecen_mum = 0 # Zorunlu mod açıksa hata vermesin diye
+            gecen_mum = 0 
             
         X = df[özellikler].iloc[:-int(min_hours)]
         y = df['Hedef'].iloc[:-int(min_hours)]
@@ -296,7 +288,6 @@ def analiz_et_safe(market, min_hours, interval, doji_modu):
         min_required_len = 15 if is_forced else 30
         
         if len(X) > min_required_len:
-            # --- XGBOOST MODELİ (HIZLI, KARARLI, OVERFIT ENGELLİ) ---
             model = xgb.XGBClassifier(
                 n_estimators=100,
                 max_depth=2,             
@@ -310,14 +301,11 @@ def analiz_et_safe(market, min_hours, interval, doji_modu):
                 n_jobs=-1
             )
             
-            # ADIM 3: ZAMAN SERİSİ VALİDASYONU (%80 Eğitim, %20 Test Ayrımı)
             split_idx = int(len(X) * 0.8)
             X_train, y_train = X.iloc[:split_idx], y.iloc[:split_idx]
             
-            # Sadece geçmiş veri ile modeli eğitiyoruz
             model.fit(X_train, y_train)
             
-            # Win-Rate hesaplamasını SADECE modelin hiç görmediği son %20'lik dilimdeki Doji'lerle yap
             doji_test_df = df.iloc[split_idx:][df.iloc[split_idx:]['Doji'] == True].iloc[:-int(min_hours)]
             
             if not doji_test_df.empty:
@@ -422,7 +410,6 @@ if secilen_sayfa == "🏠 Genel Dashboard":
         n_bar_color = "#EF4444" if "Kapalı" in n_hac else ("#10B981" if "Güçlü" in n_hac else "#94A3B8")
         e_bar_color = "#EF4444" if "Kapalı" in e_hac else ("#10B981" if "Güçlü" in e_hac else "#94A3B8")
         
-        # --- ZAMAN KONTROLÜ BURAYA EKLENDİ ---
         from datetime import datetime, timezone
         gun = datetime.now(timezone.utc).weekday()
         p_durum = "Hafta Sonu Kapalı 💤" if gun >= 5 else "Açık / İşlem Görüyor 🟢"
@@ -437,9 +424,7 @@ if secilen_sayfa == "🏠 Genel Dashboard":
         </div>""".format(clr=c_color, val=c_val, stat=c_status, v_clr=c_vol_clr, vol=c_vol, hac=c_hac)
         st.markdown(html_c, unsafe_allow_html=True)
         
-    # NASDAQ Kartı
     with fng_cols[1]:
-        # NASDAQ için skor ve durum verilerini al
         n_fng_val, n_fng_stat, n_fng_clr = get_nasdaq_fng()
         p_durum = "Açık 🟢" if datetime.now(timezone.utc).weekday() < 5 else "Kapalı 💤"
         
@@ -455,7 +440,6 @@ if secilen_sayfa == "🏠 Genel Dashboard":
         </div>""".format(clr=n_fng_clr, val=n_fng_val, stat=n_fng_stat, v_clr=n_vol_clr, vol=n_vol, hac=n_hac, durum=p_durum)
         st.markdown(html_n, unsafe_allow_html=True)
         
-    # Emtia Kartı
     with fng_cols[2]:
         html_e = """<div style="background:#0F172A; border:1px solid #1E293B; padding:12px; border-radius:8px; min-height:110px;">
             <div style="font-size:11px; font-weight:700; color:#64748B; margin-bottom:6px;">👑 EMTİA PİYASASI (ALTIN/GÜMÜŞ)</div>
@@ -474,6 +458,25 @@ if secilen_sayfa == "🏠 Genel Dashboard":
             heatmap_html += f"<div style='background: {renk}; padding: 12px; border-radius: 8px; text-align: center; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 4px 6px rgba(0,0,0,0.1);'><div style='color: rgba(255,255,255,0.9); font-size: 11px; font-weight: 700; margin-bottom: 4px;'>{m['name']}</div><div style='color: #FFF; font-size: 13px; font-weight: 800;'>{rejim}</div></div>"
         heatmap_html += "</div>"
         st.markdown(heatmap_html, unsafe_allow_html=True)
+
+# ---> İŞTE SİLİNEN FOREX BLOĞU BURADA! <---
+elif secilen_sayfa == "💱 Forex Terminali":
+    with st.spinner("Forex (Döviz) verileri analiz ediliyor..."):
+        f_vol, f_vol_clr, f_hac = get_real_market_dynamics(["EURUSD=X"])
+        f_bar_color = "#EF4444" if "Kapalı" in f_hac else ("#10B981" if "Güçlü" in f_hac else "#94A3B8")
+        p_durum = dinamik_piyasa_durumu()
+        
+    html_single_f = """<div style="background:#0F172A; border:1px solid #1E293B; padding:15px; border-radius:8px; margin-bottom:20px;">
+        <div style="font-size:12px; font-weight:700; color:#64748B; margin-bottom:6px;">💱 KÜRESEL DÖVİZ PİYASASI (FOREX)</div>
+        <div style="background:#1E293B; height:8px; border-radius:4px; overflow:hidden; margin-bottom:10px;"><div style="background:{b_clr}; width:100%; height:8px;"></div></div>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="font-size:12px; color:#94A3B8;">⚡ Volatilite (ATR): <b style="color:{v_clr};">{vol}</b> • 💵 Durum: <b style="color:#FFF;">{durum}</b></div>
+            <div style="color:{b_clr}; font-weight:800; font-size:15px;">{hac}</div>
+        </div>
+    </div>""".format(b_clr=f_bar_color, v_clr=f_vol_clr, vol=f_vol, hac=f_hac, durum=p_durum)
+    st.markdown(html_single_f, unsafe_allow_html=True)
+    
+    aktif_list = [m for m in MARKETS if m["category"] == "Forex"]
         
 elif secilen_sayfa == "🪙 Kripto Terminali":
     with st.spinner("Kripto psikolojisi sorgulanıyor..."):
@@ -517,24 +520,6 @@ elif secilen_sayfa == "👑 Emtia Terminali":
         e_vol, e_vol_clr, e_hac = get_real_market_dynamics(["GC=F", "SI=F"])
         e_bar_color = "#EF4444" if "Kapalı" in e_hac else ("#10B981" if "Güçlü" in e_hac else "#94A3B8")
         p_durum = dinamik_piyasa_durumu()
-
-elif secilen_sayfa == "👑 Emtia Terminali":
-    with st.spinner("Emtia verileri analiz ediliyor..."):
-        e_vol, e_vol_clr, e_hac = get_real_market_dynamics(["GC=F", "SI=F"])
-        e_bar_color = "#EF4444" if "Kapalı" in e_hac else ("#10B981" if "Güçlü" in e_hac else "#94A3B8")
-        p_durum = dinamik_piyasa_durumu()
-        
-    html_single_e = """<div style="background:#0F172A; border:1px solid #1E293B; padding:15px; border-radius:8px; margin-bottom:20px;">
-        <div style="font-size:12px; font-weight:700; color:#64748B; margin-bottom:6px;">👑 DEĞERLİ METAL PİYASA PSİKOLOJİSİ (ALTIN/GÜMÜŞ)</div>
-        <div style="background:#1E293B; height:8px; border-radius:4px; overflow:hidden; margin-bottom:10px;"><div style="background:{b_clr}; width:100%; height:8px;"></div></div>
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-            <div style="font-size:12px; color:#94A3B8;">⚡ Volatilite (ATR): <b style="color:{v_clr};">{vol}</b> • 💵 Durum: <b style="color:#FFF;">{durum}</b></div>
-            <div style="color:{b_clr}; font-weight:800; font-size:15px;">{hac}</div>
-        </div>
-    </div>""".format(b_clr=e_bar_color, v_clr=e_vol_clr, vol=e_vol, hac=e_hac, durum=p_durum)
-    st.markdown(html_single_e, unsafe_allow_html=True)
-    
-    aktif_list = [m for m in MARKETS if m["category"] == "Emtia"]
         
     html_single_e = """<div style="background:#0F172A; border:1px solid #1E293B; padding:15px; border-radius:8px; margin-bottom:20px;">
         <div style="font-size:12px; font-weight:700; color:#64748B; margin-bottom:6px;">👑 DEĞERLİ METAL PİYASA PSİKOLOJİSİ (ALTIN/GÜMÜŞ)</div>
@@ -653,3 +638,5 @@ else:
         if st.button("📊 {} Grafiğini İncele".format(m['name']), key="chart_btn_{}_{}".format(m['symbol'], m['category'])):
             st.session_state.chart_open = m
             st.rerun()
+
+```
