@@ -588,14 +588,10 @@ if st.button("🚀 {} İçin Canlı AI Taraması Başlat".format(secilen_sayfa.s
 # --- SİNYAL KARTLARININ EKRANA BASILMASI ---
 valid_signals = {k: v for k, v in st.session_state.results.items() if v["market"] in aktif_list}
 
-# --- SİNYAL KARTLARININ EKRANA BASILMASI ---
-valid_signals = {k: v for k, v in st.session_state.results.items() if v["market"] in aktif_list}
-
 if not valid_signals:
     st.markdown("""<div style="background:#0F172A; border:1px solid #1E293B; border-radius:12px; padding:35px; text-align:center; margin-top:10px;"><p style="color:#64748B; font-weight:600; margin:0;">Bu odada kriterlerine uyan aktif bir Doji sinyali bulunamadı.</p><p style="color:#475569; font-size:11px; margin:4px 0 0 0;">Sol menüden 'Zaman Filtresini Kaldır' seçeneğini aktif ederek geçmişteki son mumu ekrana zorlayabilirsiniz.</p></div>""", unsafe_allow_html=True)
 else:
     # Sinyalleri 'winRate' değerine göre yüksekten düşüğe (reverse=True) sıralıyoruz. 
-    # Güvenlik için .get() kullanıldı.
     sirali_sinyaller = sorted(valid_signals.items(), key=lambda item: item[1]["result"].get("winRate", 0), reverse=True)
     
     for sym, data in sirali_sinyaller:
@@ -610,6 +606,12 @@ else:
         
         confluence_badge = '<span style="background:rgba(52,211,153,0.2); border:1px solid #34D399; color:#34D399; padding:3px 10px; border-radius:6px; font-weight:800;">🔥 Trend Uyumlu</span>' if is_confluence else '<span style="background:rgba(239,68,68,0.1); border:1px solid #EF4444; color:#EF4444; padding:3px 10px; border-radius:6px; font-weight:800;">⚠️ Trend Tersi Riskli</span>'
         
+        # --- YENİ: DÜŞÜŞ İÇİN TERS YÖN (FIRSAT) ROZETİ ---
+        ters_yon_badge = ""
+        # Sinyal SELL ise ve fiyat % olarak yukarı çıkmışsa (ters yönde hareket edip daha iyi bir giriş noktası verdiyse)
+        if not is_buy and r['change'] > 0:
+            ters_yon_badge = f'<span style="background:rgba(168, 85, 247, 0.1); border:1px solid #A855F7; color:#A855F7; padding:3px 10px; border-radius:6px; font-weight:800;">🎣 Tepe Fırsatı (+%{r["change"]:.2f})</span>'
+            
         # Karar etkenlerini (Feature Importance) HTML badge'lere dönüştür
         feat_html = ""
         if "topFeatures" in r and r["topFeatures"]:
@@ -628,6 +630,7 @@ else:
                     <div style="margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
                         <span style="background: {b_bg}; border: 1px solid {b_color}; color: {b_color}; padding: 3px 10px; border-radius: 6px; font-weight: 700;">{sig}</span>
                         {conf_badge}
+                        {ters_yon_badge}
                         <span style="background: #020817; border: 1px solid #1E293B; color: #94A3B8; padding: 3px 10px; border-radius: 6px;">Tahmin Güveni: %{conf}</span>
                         <span style="background: #1E293B; border: 1px solid #F59E0B; color: #F59E0B; padding: 3px 10px; border-radius: 6px; font-weight: 600;">🎯 AI Tarihsel Win-Rate: %{w_rate}</span>
                     </div>
@@ -642,9 +645,9 @@ else:
         """.format(
             b_color=border_color, m_name=m['name'], m_cat=m['category'], h_ago=r['hoursAgo'],
             d_type=r['dojiType'], b_trend=r['bigTrend'], b_bg=badge_bg, sig=r['signal'],
-            conf_badge=confluence_badge, conf=r['confidence'], w_rate=r['winRate'],
-            price=r['price'], t_color=text_color, p_sign=plus_sign, change=r['change'],
-            features=feat_html
+            conf_badge=confluence_badge, ters_yon_badge=ters_yon_badge, conf=r['confidence'], 
+            w_rate=r['winRate'], price=r['price'], t_color=text_color, p_sign=plus_sign, 
+            change=r['change'], features=feat_html
         )
         st.markdown(html_card, unsafe_allow_html=True)
         
