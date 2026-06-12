@@ -457,11 +457,18 @@ if secilen_sayfa == "🏠 Genel Dashboard":
         heatmap_html += "</div>"
         st.markdown(heatmap_html, unsafe_allow_html=True)
 
-# ---> İŞTE SİLİNEN FOREX BLOĞU BURADA! <---
 elif secilen_sayfa == "💱 Forex Terminali":
     with st.spinner("Forex (Döviz) verileri analiz ediliyor..."):
         f_vol, f_vol_clr, f_hac = get_real_market_dynamics(["EURUSD=X"])
-        f_bar_color = "#EF4444" if "Kapalı" in f_hac else ("#10B981" if "Güçlü" in f_hac else "#94A3B8")
+        
+        # --- FOREX HACİM DÜZELTMESİ ---
+        # Eğer hacim verisi Forex doğası gereği boş gelirse ekrandaki yazıyı ve rengi güzelleştir
+        if "Veri Yok" in f_hac:
+            f_hac = "Merkeziyetsiz Hacim 🌐"
+            f_bar_color = "#3B82F6" # Şık bir Forex mavisi
+        else:
+            f_bar_color = "#EF4444" if "Kapalı" in f_hac else ("#10B981" if "Güçlü" in f_hac else "#94A3B8")
+            
         p_durum = dinamik_piyasa_durumu()
         
     html_single_f = """<div style="background:#0F172A; border:1px solid #1E293B; padding:15px; border-radius:8px; margin-bottom:20px;">
@@ -469,7 +476,7 @@ elif secilen_sayfa == "💱 Forex Terminali":
         <div style="background:#1E293B; height:8px; border-radius:4px; overflow:hidden; margin-bottom:10px;"><div style="background:{b_clr}; width:100%; height:8px;"></div></div>
         <div style="display:flex; justify-content:space-between; align-items:center;">
             <div style="font-size:12px; color:#94A3B8;">⚡ Volatilite (ATR): <b style="color:{v_clr};">{vol}</b> • 💵 Durum: <b style="color:#FFF;">{durum}</b></div>
-            <div style="color:{b_clr}; font-weight:800; font-size:15px;">{hac}</div>
+            <div style="color:{b_clr}; font-weight:800; font-size:14px;">{hac}</div>
         </div>
     </div>""".format(b_clr=f_bar_color, v_clr=f_vol_clr, vol=f_vol, hac=f_hac, durum=p_durum)
     st.markdown(html_single_f, unsafe_allow_html=True)
