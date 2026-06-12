@@ -174,13 +174,22 @@ def analiz_et_safe(market, min_hours, interval, doji_modu):
         govde = abs(df['Open'] - df['Close'])
         toplam_boy = df['High'] - df['Low']
         
+        # --- PİYASA DUYARLI DOJİ FİLTRESİ (Forex Gürültü Engelleme) ---
         if "Dinamik" in doji_modu:
             ortalama_boy = toplam_boy.rolling(window=20).mean()
             volatilite_carpani = toplam_boy / (ortalama_boy + 1e-10)
-            dinamik_sinir = (0.3 * volatilite_carpani).clip(lower=0.15, upper=0.45)
+            
+            # Forex piyasası çok dar olduğu için hassasiyeti yarı yarıya indirgeyerek sahte sinyalleri eliyoruz
+            if market["category"] == "Forex":
+                dinamik_sinir = (0.12 * volatilite_carpani).clip(lower=0.05, upper=0.20)
+            else:
+                dinamik_sinir = (0.3 * volatilite_carpani).clip(lower=0.15, upper=0.45)
+                
             df['Doji'] = govde <= (toplam_boy * dinamik_sinir)
         else:
-            df['Doji'] = govde <= (toplam_boy * 0.3)
+            # Sabit modda bile Forex için daha acımasız ve dar bir sınır (%10) uyguluyoruz
+            sinir = 0.10 if market["category"] == "Forex" else 0.30
+            df['Doji'] = govde <= (toplam_boy * sinir)
         
         delta = df['Close'].diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
