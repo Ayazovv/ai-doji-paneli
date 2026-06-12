@@ -589,9 +589,9 @@ if st.button("🚀 {} İçin Canlı AI Taraması Başlat".format(secilen_sayfa.s
 valid_signals = {k: v for k, v in st.session_state.results.items() if v["market"] in aktif_list}
 
 if not valid_signals:
-    st.markdown("""<div style="background:#0F172A; border:1px solid #1E293B; border-radius:12px; padding:35px; text-align:center; margin-top:10px;"><p style="color:#64748B; font-weight:600; margin:0;">Bu odada kriterlerine uyan aktif bir Doji sinyali bulunamadı.</p><p style="color:#475569; font-size:11px; margin:4px 0 0 0;">Sol menüden 'Zaman Filtresini Kaldır' seçeneğini aktif ederek geçmişteki son mumu ekrana zorlayabilirsiniz.</p></div>""", unsafe_allow_html=True)
+    st.markdown("""<div style="background:#0F172A; border:1px solid #1E293B; border-radius:12px; padding:35px; text-align:center; margin-top:10px;"><p style="color:#64748B; font-weight:600; margin:0;">Bu odada kriterlerine uyan aktif bir Doji sinyali bulunamadı.</p></div>""", unsafe_allow_html=True)
 else:
-    # Sinyalleri 'winRate' değerine göre yüksekten düşüğe (reverse=True) sıralıyoruz. 
+    # Win-Rate'e göre sıralama
     sirali_sinyaller = sorted(valid_signals.items(), key=lambda item: item[1]["result"].get("winRate", 0), reverse=True)
     
     for sym, data in sirali_sinyaller:
@@ -602,43 +602,34 @@ else:
         badge_bg = "rgba(52, 211, 153, 0.1)" if is_buy else "rgba(248, 113, 113, 0.1)"
         text_color = '#4ADE80' if r['change'] >= 0 else '#F87171'
         plus_sign = '+' if r['change'] >= 0 else ''
-        is_confluence = (is_buy and r["bigTrend"] == "Boğa (Yukarı)") or (not is_buy and r["bigTrend"] == "Ayı (Aşağı)")
         
-        confluence_badge = '<span style="background:rgba(52,211,153,0.2); border:1px solid #34D399; color:#34D399; padding:3px 10px; border-radius:6px; font-weight:800;">🔥 Trend Uyumlu</span>' if is_confluence else '<span style="background:rgba(239,68,68,0.1); border:1px solid #EF4444; color:#EF4444; padding:3px 10px; border-radius:6px; font-weight:800;">⚠️ Trend Tersi Riskli</span>'
-        
-        # --- YENİ: DÜŞÜŞ İÇİN TERS YÖN (FIRSAT) ROZETİ ---
+        # Rozet Mantığı
         ters_yon_badge = ""
-        # Sinyal SELL ise ve fiyat % olarak yukarı çıkmışsa (ters yönde hareket edip daha iyi bir giriş noktası verdiyse)
         if not is_buy and r['change'] > 0:
-            ters_yon_badge = f'<span style="background:rgba(168, 85, 247, 0.1); border:1px solid #A855F7; color:#A855F7; padding:3px 10px; border-radius:6px; font-weight:800;">🎣 Tepe Fırsatı (+%{r["change"]:.2f})</span>'
+            ters_yon_badge = f'<span style="background:rgba(168, 85, 247, 0.1); border:1px solid #A855F7; color:#A855F7; padding:3px 10px; border-radius:6px; font-weight:800; margin-left:5px;">🎣 Tepe Fırsatı (+%{r["change"]:.2f})</span>'
             
-        # Karar etkenlerini (Feature Importance) HTML badge'lere dönüştür
-        feat_html = ""
-        if "topFeatures" in r and r["topFeatures"]:
-            feat_html = " ".join([f"<span style='background:#1E293B; border:1px solid #334155; padding:3px 8px; border-radius:6px; font-size:11px; color:#CBD5E1;'>🧠 {k}: <b>%{v:.1f}</b></span>" for k, v in r["topFeatures"].items()])
-            feat_html = f"<div style='margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center;'><span style='color: #64748B; font-size: 11px; font-weight: 600;'>Karar Etkenleri:</span> {feat_html}</div>"
-
-        # Kart basma kısmını şu şekilde "temiz" bir yapıda tekrar dene
-html_card = f"""
-<div style="background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%); border: 1px solid #1E293B; border-left: 5px solid {border_color}; border-radius: 10px; padding: 15px; margin-bottom: 12px;">
-    <div style="display: flex; justify-content: space-between; align-items: center;">
-        <div style="flex: 1;">
-            <strong style="color: #F1F5F9; font-size: 16px;">{m['name']}</strong>
-            <div style="margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap;">
-                <span style="background: {badge_bg}; border: 1px solid {border_color}; color: {border_color}; padding: 3px 10px; border-radius: 6px; font-weight: 700;">{r['signal']}</span>
-                <span style="background: #020817; border: 1px solid #1E293B; color: #94A3B8; padding: 3px 10px; border-radius: 6px;">Tahmin Güveni: %{int(r['confidence'])}</span>
-                <span style="background: #1E293B; border: 1px solid #F59E0B; color: #F59E0B; padding: 3px 10px; border-radius: 6px; font-weight: 600;">🎯 Win-Rate: %{int(r['winRate'])}</span>
+        # HTML Kart Oluşturma (Hizalamaya dikkat!)
+        html_card = f"""
+        <div style="background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%); border: 1px solid #1E293B; border-left: 5px solid {border_color}; border-radius: 10px; padding: 15px; margin-bottom: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="flex: 1;">
+                    <strong style="color: #F1F5F9; font-size: 16px;">{m['name']}</strong>
+                    <div style="margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap;">
+                        <span style="background: {badge_bg}; border: 1px solid {border_color}; color: {border_color}; padding: 3px 10px; border-radius: 6px; font-weight: 700;">{r['signal']}</span>
+                        <span style="background: #020817; border: 1px solid #1E293B; color: #94A3B8; padding: 3px 10px; border-radius: 6px;">Güven: %{int(r['confidence'])}</span>
+                        <span style="background: #1E293B; border: 1px solid #F59E0B; color: #F59E0B; padding: 3px 10px; border-radius: 6px; font-weight: 600;">Win-Rate: %{int(r['winRate'])}</span>
+                        {ters_yon_badge}
+                    </div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="color: #F1F5F9; font-weight: 700; font-size: 18px;">${r['price']:,.2f}</div>
+                    <div style="color: {text_color}; font-size: 14px;">{plus_sign}{r['change']:.2f}%</div>
+                </div>
             </div>
         </div>
-        <div style="text-align: right;">
-            <div style="color: #F1F5F9; font-weight: 700;">${r['price']:,.2f}</div>
-            <div style="color: {text_color};">{plus_sign}{r['change']:.2f}%</div>
-        </div>
-    </div>
-</div>
-"""
-st.markdown(html_card, unsafe_allow_html=True)
+        """
+        st.markdown(html_card, unsafe_allow_html=True)
         
-        if st.button("📊 {} Grafiğini İncele".format(m['name']), key="chart_btn_{}_{}".format(m['symbol'], m['category'])):
+        if st.button(f"📊 {m['name']} Grafiğini İncele", key=f"chart_btn_{m['symbol']}_{m['category']}"):
             st.session_state.chart_open = m
             st.rerun()
