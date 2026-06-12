@@ -166,10 +166,10 @@ def buyuk_trend_kontrol(symbol):
     except:
         return "Yansız"
 
-def analiz_et_safe(market, min_hours, interval):
+def analiz_et_safe(market, min_hours, interval, doji_modu):
     try:
-        # ADIM 1: DAHA GENİŞ EĞİTİM VERİSİ (Popülasyonu büyütüyoruz)
-        if interval == "1h": periyot = "1y" # Yahoo 1 saatlik veride maks 730 gün verir
+        # Hızlı indirme için optimize edilmiş periyotlar
+        if interval == "1h": periyot = "3mo"
         elif interval == "4h": periyot = "2y"
         else: periyot = "5y" # Günlük grafikte son 5 yıla bakarak tüm krizleri öğren
         
@@ -178,10 +178,19 @@ def analiz_et_safe(market, min_hours, interval):
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
             
-        # DOJİ HESAPLAMASI (Hassasiyet %30'a çıkarıldı, yakalaması çok daha kolay)
+        # --- SEÇİLEBİLİR DOJİ HESAPLAMASI ---
         govde = abs(df['Open'] - df['Close'])
         toplam_boy = df['High'] - df['Low']
-        df['Doji'] = govde <= (toplam_boy * 0.3)
+        
+        if "Dinamik" in doji_modu:
+            # 1. Dinamik Mod (Piyasanın ateşine göre esner)
+            ortalama_boy = toplam_boy.rolling(window=20).mean()
+            volatilite_carpani = toplam_boy / (ortalama_boy + 1e-10)
+            dinamik_sinir = (0.3 * volatilite_carpani).clip(lower=0.15, upper=0.45)
+            df['Doji'] = govde <= (toplam_boy * dinamik_sinir)
+        else:
+            # 2. Sabit Mod (Eski klasik 0.3 mantığı)
+            df['Doji'] = govde <= (toplam_boy * 0.3)
         
         delta = df['Close'].diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
@@ -380,6 +389,7 @@ st.sidebar.markdown("---")
 st.sidebar.subheader("🎛️ Küresel Filtreler")
 global_interval = st.sidebar.selectbox("⏳ Zaman Dilimi (Periyot)", ["1h", "4h", "1d"], index=0)
 global_min_hours = st.sidebar.slider("🎯 AI Gelecek Vadesi (İleri Mum)", 1, 12, 4)
+global_doji_modu = st.sidebar.radio("🎯 Doji Hassasiyet Modu", ["Dinamik (Otomatik Esner)", "Sabit (Klasik 0.3)"], index=0)
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("🛠️ Sistem Test Modu")
