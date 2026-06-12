@@ -1,14 +1,3 @@
-Hatayı kodun içinde şıp diye buldum! Kopyalama-yapıştırma işlemleri sırasında çok tatlı bir karışıklık olmuş.
-
-Kodunun aşağılarına doğru indiğimizde **"Emtia Terminali" bölümü yanlışlıkla iki kere alt alta yapıştırılmış** ve **"Forex Terminali" bloğu ise tamamen silinmiş**.
-
-Sistem sol menüden "Forex" seçtiğinde, aşağıda Forex kod bloğunu bulamadığı için o "Güvenlik Ağı" dediğimiz `aktif_list = []` (boş liste) kuralı devreye giriyor. Doğal olarak taranacak hiçbir şey bulamadan taramayı anında bitiriyor.
-
-Emtia kopyalarını sildim, Forex bloğunu ait olduğu yere kusursuz bir şekilde ekledim ve Python'un sevmediği tüm gizli boşlukları temizledim.
-
-Mevcut dosyanı tamamen temizle ve bu **%100 çalışan, düzeltilmiş tam sürümü** yapıştır:
-
-```python
 # -*- coding: utf-8 -*-
 """
 AI Doji Terminali - v5 (Pro XGBoost, Cache & Tam Arayüz)
@@ -638,5 +627,3 @@ else:
         if st.button("📊 {} Grafiğini İncele".format(m['name']), key="chart_btn_{}_{}".format(m['symbol'], m['category'])):
             st.session_state.chart_open = m
             st.rerun()
-
-```
