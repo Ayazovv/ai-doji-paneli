@@ -200,6 +200,10 @@ def analiz_et_safe(market, min_hours, interval, doji_modu):
         df['EMA20'] = df['Close'].ewm(span=20, adjust=False).mean()
         df['Price_to_EMA20'] = df['Close'] / df['EMA20']
         
+        # YENİ: Yapay zekaya 200 mumluk (Ana Trend) bakış açısını veriyoruz
+        df['EMA200'] = df['Close'].ewm(span=200, adjust=False).mean()
+        df['Price_to_EMA200'] = df['Close'] / (df['EMA200'] + 1e-10)
+        
         high_low = df['High'] - df['Low']
         high_close = abs(df['High'] - df['Close'].shift())
         low_close = abs(df['Low'] - df['Close'].shift())
@@ -245,13 +249,13 @@ def analiz_et_safe(market, min_hours, interval, doji_modu):
         df = df[df['Hedef'] != -1].copy()  # kararsiz mumlar modeli kirletiyor, cikar
         
         ozellikler = [
-            'RSI', 'Price_to_EMA20', 'ATR', 'Upper_Shadow', 'Lower_Shadow', 
+            'RSI', 'Price_to_EMA20', 'Price_to_EMA200', 'ATR', 'Upper_Shadow', 'Lower_Shadow', 
             'Volume_Shock', 'MACD_Hist', 'BB_Width', 'Price_to_BB', 'Trend_Slope'
         ]
         
         feature_names_tr = {
-            'RSI': 'RSI (Aşırılık)', 'Price_to_EMA20': 'Trend Uzaklığı', 'ATR': 'Volatilite',
-            'Upper_Shadow': 'Üst Gölge', 'Lower_Shadow': 'Alt Gölge', 'Volume_Shock': 'Hacim Şoku',
+            'RSI': 'RSI (Aşırılık)', 'Price_to_EMA20': 'Kısa Trend (20) Farkı', 'Price_to_EMA200': 'Ana Trend (200) Farkı',
+            'ATR': 'Volatilite', 'Upper_Shadow': 'Üst Gölge', 'Lower_Shadow': 'Alt Gölge', 'Volume_Shock': 'Hacim Şoku',
             'MACD_Hist': 'MACD İvmesi', 'BB_Width': 'Bollinger Sıkışması', 'Price_to_BB': 'Bant Konumu',
             'Trend_Slope': 'Trend Eğimi'
         }
