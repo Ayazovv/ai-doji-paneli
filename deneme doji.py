@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AI Doji Terminali - v6.1 (Katmanlı Filtre, TimeSeriesSplit, Sınırsız Alarm & BIST)
+AI Doji Terminali - v6.4 (TAM SÜRÜM: İstatistik Kartları, Rozet Sistemi, Sınırsız Alarm)
 """
 
 import streamlit as st
@@ -15,7 +15,7 @@ import traceback
 from sklearn.model_selection import TimeSeriesSplit
 
 # --- SAYFA AYARLARI ---
-st.set_page_config(page_title="AI Doji Terminali v6", layout="wide", initial_sidebar_state="auto")
+st.set_page_config(page_title="AI Doji Terminali v6.4", layout="wide", initial_sidebar_state="auto")
 
 # --- HIZLANDIRICI: CACHE (ÖNBELLEK) FONKSİYONU ---
 @st.cache_data(ttl=300) 
@@ -33,42 +33,33 @@ def anlik_fiyat_kripto(cg_id):
 
 def anlik_fiyat_hisse(symbol):
     try:
-        # Sınırsız ve ücretsiz Yahoo Finance altyapısı (fast_info)
         ticker = yf.Ticker(symbol)
         fiyat = ticker.fast_info.get('last_price')
-        
-        # Olası bir hata durumunda günlük kapanışa başvur
         if fiyat is None:
             df = ticker.history(period="1d")
             if not df.empty:
                 fiyat = df['Close'].iloc[-1]
-                
         return float(fiyat) if fiyat else None
     except Exception as e:
         st.session_state.setdefault("hatalar", []).append(f"Alarm Fiyatı Çekilemedi ({symbol}): {str(e)}")
         return None
 
-# --- GLOBAL PİYASA TANIMLARI (GENİŞLETİLMİŞ) ---
+# --- GLOBAL PİYASA TANIMLARI ---
 MARKETS = [
-    # Emtia
     {"name": "Altın (XAU/USD)", "symbol": "GC=F", "tv": "OANDA:XAUUSD", "category": "Emtia", "color": "#F59E0B"},
     {"name": "Gümüş (XAG/USD)", "symbol": "SI=F", "tv": "OANDA:XAGUSD", "category": "Emtia", "color": "#94A3B8"},
-    # Forex
     {"name": "EUR/USD", "symbol": "EURUSD=X", "tv": "OANDA:EURUSD", "category": "Forex", "color": "#3B82F6"},
     {"name": "GBP/USD", "symbol": "GBPUSD=X", "tv": "OANDA:GBPUSD", "category": "Forex", "color": "#8B5CF6"},
     {"name": "USD/JPY", "symbol": "JPY=X", "tv": "OANDA:USDJPY", "category": "Forex", "color": "#10B981"},
-    # NASDAQ
     {"name": "NASDAQ Endeksi", "symbol": "^IXIC", "tv": "NASDAQ:IXIC", "category": "NASDAQ", "color": "#A855F7"},
     {"name": "Apple", "symbol": "AAPL", "tv": "NASDAQ:AAPL", "category": "NASDAQ", "color": "#60A5FA"},
     {"name": "Tesla", "symbol": "TSLA", "tv": "NASDAQ:TSLA", "category": "NASDAQ", "color": "#EF4444"},
     {"name": "NVIDIA", "symbol": "NVDA", "tv": "NASDAQ:NVDA", "category": "NASDAQ", "color": "#10B981"},
     {"name": "Microsoft", "symbol": "MSFT", "tv": "NASDAQ:MSFT", "category": "NASDAQ", "color": "#3B82F6"},
-    # Kripto
     {"name": "Bitcoin", "symbol": "BTC-USD", "tv": "BINANCE:BTCUSDT", "category": "Kripto", "cg_id": "bitcoin", "color": "#F59E0B"},
     {"name": "Ethereum", "symbol": "ETH-USD", "tv": "BINANCE:ETHUSDT", "category": "Kripto", "cg_id": "ethereum", "color": "#6366F1"},
     {"name": "Solana", "symbol": "SOL-USD", "tv": "BINANCE:SOLUSDT", "category": "Kripto", "cg_id": "solana", "color": "#14B8A6"},
     {"name": "BNB", "symbol": "BNB-USD", "tv": "BINANCE:BNBUSDT", "category": "Kripto", "cg_id": "binancecoin", "color": "#EAB308"},
-    # BIST (Yeni)
     {"name": "BIST 100", "symbol": "XU100.IS", "tv": "BIST:XU100", "category": "BIST", "color": "#06B6D4"},
     {"name": "Garanti BBVA", "symbol": "GARAN.IS", "tv": "BIST:GARAN", "category": "BIST", "color": "#10B981"}
 ]
@@ -96,11 +87,9 @@ def get_nasdaq_fng():
         vix_df = yf.download("^VIX", period="5d", interval="1d", progress=False)
         if isinstance(vix_df.columns, pd.MultiIndex):
             vix_df.columns = vix_df.columns.get_level_values(0)
-            
         son_vix = float(vix_df['Close'].iloc[-1])
         fng_score = 100 - ((son_vix - 10) / (40 - 10) * 100)
         fng_score = max(0, min(100, int(fng_score))) 
-        
         if fng_score < 25: return fng_score, "Aşırı Korku 😱", "#EF4444"
         elif fng_score < 45: return fng_score, "Korku 😨", "#F97316"
         elif fng_score < 55: return fng_score, "Nötr 😐", "#94A3B8"
@@ -156,17 +145,12 @@ def get_real_market_dynamics(symbols):
 
 def dinamik_piyasa_durumu(kategori="Genel"):
     if kategori == "Kripto": return "Açık 🟢"
-    
     now_utc = datetime.now(timezone.utc)
     gun = now_utc.weekday()
     saat = now_utc.hour
     tarih_str = now_utc.strftime("%Y-%m-%d")
     
-    NYSE_TATILLER_2026 = [
-        "2026-01-01", "2026-01-19", "2026-02-16", "2026-04-03", 
-        "2026-05-25", "2026-06-19", "2026-07-03", "2026-09-07", 
-        "2026-11-26", "2026-12-25"
-    ]
+    NYSE_TATILLER_2026 = ["2026-01-01", "2026-01-19", "2026-02-16", "2026-04-03", "2026-05-25", "2026-06-19", "2026-07-03", "2026-09-07", "2026-11-26", "2026-12-25"]
     
     if tarih_str in NYSE_TATILLER_2026: return "Tatil 💤"
     if gun == 5 or gun == 6 or (gun == 4 and saat >= 21): return "Kapalı 💤"
@@ -207,7 +191,6 @@ def buyuk_trend_kontrol(symbol):
             
         ema200 = df_big['Close'].ewm(span=200, min_periods=200, adjust=False).mean()
         son_ema = ema200.dropna()
-        
         if son_ema.empty: return "Yansız"
         
         ema200_son = son_ema.iloc[-1]
@@ -288,7 +271,6 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
         
         tam_veri_uzunlugu = len(df)
         df['Gercek_Sira'] = range(tam_veri_uzunlugu)
-        
         df = df[df['Hedef'] != -1].copy() 
         
         features = [
@@ -304,8 +286,9 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
             'Trend_Slope': 'Trend Eğimi'
         }
         
-        son_20_mum = df.tail(20)
-        doji_olanlar = son_20_mum[son_20_mum['Doji'] == True]
+        # --- ZAMAN FİLTRESİ ---
+        son_50_mum = df.tail(50)
+        doji_olanlar = son_50_mum[son_50_mum['Doji'] == True]
         
         if interval == "1h": min_mum, max_mum = 4, 10  
         elif interval == "4h": min_mum, max_mum = 1, 3   
@@ -318,18 +301,18 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
                 mum_yasi = tam_veri_uzunlugu - 1 - orijinal_sira
                 if min_mum <= mum_yasi <= max_mum: 
                     olgun_dojiler.append(mum_yasi)
+                elif is_forced: # Zaman filtresi kaldırıldıysa her halükarda ekle
+                    olgun_dojiler.append(mum_yasi)
                     
-        if not olgun_dojiler and not is_forced: 
+        if not olgun_dojiler: 
             return None 
             
-        gecen_mum = min(olgun_dojiler) if olgun_dojiler else 0 
+        gecen_mum = min(olgun_dojiler)
             
         X = df[features].iloc[:-int(min_hours)]
         y = df['Hedef'].iloc[:-int(min_hours)]
         win_rate, toplam_sinyal = 50, 0
         en_etkili_faktorler = {}
-        
-        min_required_len = 15 if is_forced else 30
         
         model = xgb.XGBClassifier(
             n_estimators=50, max_depth=3, learning_rate=0.03, subsample=0.3,
@@ -337,7 +320,7 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
             random_state=42, eval_metric='logloss', n_jobs=-1
         )
         
-        if len(X) > min_required_len:
+        if len(X) > 15:
             tscv = TimeSeriesSplit(n_splits=5)
             fold_scores = []
             
@@ -370,6 +353,7 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
             
         signal = "BUY" if tahmin_yon == 1 else "SELL"
         
+        # --- SKORLAMA ---
         big_trend = buyuk_trend_kontrol(market["symbol"])
         is_confluence = (signal == "BUY" and big_trend == "Boğa (Yukarı)") or (signal == "SELL" and big_trend == "Ayı (Aşağı)")
         
@@ -380,15 +364,10 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
         skor = 0
         if guven_orani >= 65: skor += 2
         elif guven_orani >= 55: skor += 1
-        
         if is_confluence: skor += 2
-        
         if (signal == "BUY" and rsi_val < 35) or (signal == "SELL" and rsi_val > 65): skor += 2
         if (signal == "BUY" and price_to_bb < 0.2) or (signal == "SELL" and price_to_bb > 0.8): skor += 1
         if (signal == "BUY" and macd_hist > 0) or (signal == "SELL" and macd_hist < 0): skor += 1
-        
-        if skor < 5 and not is_forced:
-            return None
         
         doji_iloc = len(df) - 1 
         if gecen_mum > 0:
@@ -406,7 +385,10 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
         _lookback = {"1h": 24, "4h": 30, "1d": 5}.get(interval, 12)
         _lookback = min(_lookback, len(df) - 1)
         
-        rebound_pct, drawdown_pct = 0.0, 0.0
+        # --- TEPE VE DİP FIRSATI HESAPLAMA (DRAWDOWN/REBOUND - GERİ GELDİ) ---
+        rebound_pct = 0.0
+        drawdown_pct = 0.0
+        
         if gecen_mum > 0:
             gelecek_mumlar_high = df['High'].iloc[doji_iloc + 1:]
             gelecek_mumlar_low = df['Low'].iloc[doji_iloc + 1:]
@@ -438,6 +420,7 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
 if "results" not in st.session_state: st.session_state.results = {}
 if "chart_open" not in st.session_state: st.session_state.chart_open = None
 if "force_past" not in st.session_state: st.session_state.force_past = False
+if "strict_mode" not in st.session_state: st.session_state.strict_mode = False
 if "hatalar" not in st.session_state: st.session_state.hatalar = []
 if "ozel_semboller" not in st.session_state: st.session_state.ozel_semboller = []
 if "alarmlar" not in st.session_state: st.session_state.alarmlar = []
@@ -457,7 +440,7 @@ st.markdown("""
 # --- SOL MENÜ NAVİGASYONU (SIDEBAR) ---
 st.sidebar.markdown("""
 <div style='text-align: center; padding: 10px; border-bottom: 1px solid #1E293B; margin-bottom: 20px;'>
-    <h3 style='color: #FFF; margin: 0; font-size: 16px;'>🌐 AI TERMINAL v6.1</h3>
+    <h3 style='color: #FFF; margin: 0; font-size: 16px;'>🌐 AI TERMINAL v6.4</h3>
 </div>
 """, unsafe_allow_html=True)
 
@@ -474,7 +457,7 @@ global_doji_modu = st.sidebar.radio("🎯 Doji Hassasiyet Modu", ["Dinamik (Otom
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("➕ Özel Sembol Ekle")
-ozel_sembol = st.sidebar.text_input("Yahoo Finance Sembolü", placeholder="Örn: THYAO.IS veya KO")
+ozel_sembol = st.sidebar.text_input("Yahoo Finance Sembolü", placeholder="Örn: THYAO.IS")
 if st.sidebar.button("Listeye Ekle") and ozel_sembol:
     st.session_state.ozel_semboller.append({
         "name": ozel_sembol.upper(), "symbol": ozel_sembol.upper(),
@@ -484,7 +467,7 @@ if st.sidebar.button("Listeye Ekle") and ozel_sembol:
     st.rerun()
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("🔔 Canlı Fiyat Alarmı (API)")
+st.sidebar.subheader("🔔 Canlı Fiyat Alarmı")
 alarm_secilen = st.sidebar.selectbox("Sembol Seç", [m["name"] for m in TUM_MARKETLER])
 alarm_hedef = st.sidebar.number_input("Hedef Fiyat ($ / TL)", min_value=0.0, format="%.4f")
 if st.sidebar.button("Alarm Kur"):
@@ -501,8 +484,9 @@ if st.session_state.alarmlar:
             st.rerun()
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("🛠️ Sistem Test Modu")
-st.session_state.force_past = st.sidebar.checkbox("🔓 Zaman & Skor Filtresini Kaldır", value=st.session_state.force_past)
+st.sidebar.subheader("🛠️ Sistem Test & Görünüm")
+st.session_state.force_past = st.sidebar.checkbox("🔓 Zaman Filtresini Kaldır (Eski Dojileri Bul)", value=st.session_state.force_past)
+st.session_state.strict_mode = st.sidebar.checkbox("🔒 Skor Filtresi (Sadece 5+ Rozetleri Göster)", value=st.session_state.strict_mode)
 
 if st.session_state.hatalar:
     st.sidebar.markdown("---")
@@ -515,8 +499,8 @@ if st.session_state.hatalar:
 
 st.markdown(f"""
 <div style="background: linear-gradient(180deg, #0F172A 0%, #020817 100%); border-bottom: 1px solid #1E293B; padding: 15px; margin-bottom: 15px; border-radius: 8px;">
-    <h1 style="margin: 0; font-size: 22px; font-weight: 800; color: #FFF;">🤖 Joe Barbarov AI Terminal v6.1</h1>
-    <p style="margin: 0; font-size: 12px; color: #64748B;">Oda: <b>{secilen_sayfa}</b> • XGBoost + 5 Katmanlı Filtre Sistemi Aktif</p>
+    <h1 style="margin: 0; font-size: 22px; font-weight: 800; color: #FFF;">🤖 Joe Barbarov AI Terminal v6.4</h1>
+    <p style="margin: 0; font-size: 12px; color: #64748B;">Oda: <b>{secilen_sayfa}</b> • Tam Sürüm: Rozet Sistemi, UI Kartları & Drawdown/Rebound Aktif</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -536,33 +520,143 @@ if st.session_state.alarmlar:
             if fark < 0.005: 
                 st.error(f"🚨 **ALARM TETİKLENDİ:** {m['name']} hedef fiyata ({alarm['hedef']}) ulaştı! (Anlık: {anlik})")
 
-# --- PANEL İÇERİĞİ ---
+# --- PANEL İÇERİĞİ VE GÖRSEL KARTLAR (GERİ GELDİ) ---
 aktif_list = []
 
 if secilen_sayfa == "🏠 Genel Dashboard":
+    with st.spinner("Tüm piyasa dinamikleri sorgulanıyor..."):
+        c_val, c_status, c_color = get_crypto_fng()
+        n_vol, n_vol_clr, n_hac = get_real_market_dynamics(["AAPL", "TSLA", "NVDA", "MSFT"])
+        e_vol, e_vol_clr, e_hac = get_real_market_dynamics(["GC=F", "SI=F"])
+        c_vol = "Yüksek 🔥" if c_val > 65 else ("Düşük 💤" if c_val < 35 else "Normal 📊")
+        c_vol_clr = "#34D399" if c_val > 65 else ("#64748B" if c_val < 35 else "#F59E0B")
+        c_hac = "Güçlü 💰" if c_val > 55 else "Zayıf 📉"
+        n_bar_color = "#EF4444" if "Kapalı" in n_hac else ("#10B981" if "Güçlü" in n_hac else "#94A3B8")
+        e_bar_color = "#EF4444" if "Kapalı" in e_hac else ("#10B981" if "Güçlü" in e_hac else "#94A3B8")
+        p_durum = dinamik_piyasa_durumu()
+
+    fng_cols = st.columns(3)
+    with fng_cols[0]:
+        html_c = """<div style="background:#0F172A; border:1px solid #1E293B; padding:12px; border-radius:8px; min-height:110px;">
+            <div style="font-size:11px; font-weight:700; color:#64748B; margin-bottom:6px;">🪙 KRİPTO PİYASASI (BTC/ETH)</div>
+            <div style="background:#1E293B; height:6px; border-radius:3px; overflow:hidden; margin-bottom:8px;"><div style="background:{clr}; width:{val}%; height:6px;"></div></div>
+            <div style="color:{clr}; font-weight:800; font-size:13px; text-align:right; margin-bottom:6px;">{stat} ({val}/100)</div>
+            <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748B; border-top:1px solid rgba(51,65,85,0.3); padding-top:4px;"><span>⚡ Vol: <b style="color:{v_clr};">{vol}</b></span><span>💵 Hacim: <b style="color:#FFF;">{hac}</b></span></div>
+        </div>""".format(clr=c_color, val=c_val, stat=c_status, v_clr=c_vol_clr, vol=c_vol, hac=c_hac)
+        st.markdown(html_c, unsafe_allow_html=True)
+        
+    with fng_cols[1]:
+        n_fng_val, n_fng_stat, n_fng_clr = get_nasdaq_fng()
+        html_n = """<div style="background:#0F172A; border:1px solid #1E293B; padding:12px; border-radius:8px; min-height:110px;">
+            <div style="font-size:11px; font-weight:700; color:#64748B; margin-bottom:6px;">🇺🇸 ABD BORSALARI (NASDAQ)</div>
+            <div style="background:#1E293B; height:6px; border-radius:3px; overflow:hidden; margin-bottom:8px;"><div style="background:{clr}; width:{val}%; height:6px;"></div></div>
+            <div style="color:{clr}; font-weight:800; font-size:13px; text-align:right; margin-bottom:6px;">{stat} ({val}/100)</div>
+            <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748B; border-top:1px solid rgba(51,65,85,0.3); padding-top:4px;">
+                <span>⚡ Vol: <b style="color:{v_clr};">{vol}</b></span>
+                <span>💵 Hacim: <b style="color:#FFF;">{hac}</b></span>
+                <span>📍 <b style="color:#FFF;">{durum}</b></span>
+            </div>
+        </div>""".format(clr=n_fng_clr, val=n_fng_val, stat=n_fng_stat, v_clr=n_vol_clr, vol=n_vol, hac=n_hac, durum=p_durum)
+        st.markdown(html_n, unsafe_allow_html=True)
+        
+    with fng_cols[2]:
+        html_e = """<div style="background:#0F172A; border:1px solid #1E293B; padding:12px; border-radius:8px; min-height:110px;">
+            <div style="font-size:11px; font-weight:700; color:#64748B; margin-bottom:6px;">👑 EMTİA PİYASASI (ALTIN/GÜMÜŞ)</div>
+            <div style="background:#1E293B; height:6px; border-radius:3px; overflow:hidden; margin-bottom:8px;"><div style="background:{b_clr}; width:100%; height:6px;"></div></div>
+            <div style="color:{b_clr}; font-weight:800; font-size:13px; text-align:right; margin-bottom:6px;">Piyasa: {durum}</div>
+            <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748B; border-top:1px solid rgba(51,65,85,0.3); padding-top:4px;"><span>⚡ Vol: <b style="color:{v_clr};">{vol}</b></span><span>💵 Hacim: <b style="color:#FFF;">{hac}</b></span></div>
+        </div>""".format(b_clr=e_bar_color, hac=e_hac, v_clr=e_vol_clr, vol=e_vol, durum=p_durum)
+        st.markdown(html_e, unsafe_allow_html=True)
+        
     aktif_list = TUM_MARKETLER
-    with st.spinner("Piyasa haritası yükleniyor..."):
+    st.markdown("<h3 style='color: #F1F5F9; font-size: 16px; margin-top: 15px; margin-bottom: 10px;'>🗺️ Canlı Piyasa Rejimi (Isı Haritası)</h3>", unsafe_allow_html=True)
+    with st.spinner("Isı haritası verileri işleniyor..."):
         heatmap_html = "<div style='display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 25px;'>"
-        for m in aktif_list[:12]: 
+        for m in aktif_list[:12]:
             rejim, renk = piyasa_rejimi_hesapla(m["symbol"])
-            heatmap_html += f"<div style='background: {renk}; padding: 12px; border-radius: 8px; text-align: center; border: 1px solid rgba(255,255,255,0.1);'><div style='color: rgba(255,255,255,0.9); font-size: 11px; font-weight: 700; margin-bottom: 4px;'>{m['name']}</div><div style='color: #FFF; font-size: 13px; font-weight: 800;'>{rejim}</div></div>"
+            heatmap_html += f"<div style='background: {renk}; padding: 12px; border-radius: 8px; text-align: center; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 4px 6px rgba(0,0,0,0.1);'><div style='color: rgba(255,255,255,0.9); font-size: 11px; font-weight: 700; margin-bottom: 4px;'>{m['name']}</div><div style='color: #FFF; font-size: 13px; font-weight: 800;'>{rejim}</div></div>"
         heatmap_html += "</div>"
         st.markdown(heatmap_html, unsafe_allow_html=True)
 
 elif secilen_sayfa == "💱 Forex Terminali":
+    with st.spinner("Forex (Döviz) verileri analiz ediliyor..."):
+        f_vol, f_vol_clr, f_hac = get_real_market_dynamics(["EURUSD=X"])
+        if "Veri Yok" in f_hac:
+            f_hac, f_bar_color = "Merkeziyetsiz Hacim 🌐", "#3B82F6" 
+        else:
+            f_bar_color = "#EF4444" if "Kapalı" in f_hac else ("#10B981" if "Güçlü" in f_hac else "#94A3B8")
+        p_durum = dinamik_piyasa_durumu("Forex")
+        
+    html_single_f = """<div style="background:#0F172A; border:1px solid #1E293B; padding:15px; border-radius:8px; margin-bottom:20px;">
+        <div style="font-size:12px; font-weight:700; color:#64748B; margin-bottom:6px;">💱 KÜRESEL DÖVİZ PİYASASI (FOREX)</div>
+        <div style="background:#1E293B; height:8px; border-radius:4px; overflow:hidden; margin-bottom:10px;"><div style="background:{b_clr}; width:100%; height:8px;"></div></div>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="font-size:12px; color:#94A3B8;">⚡ Volatilite (ATR): <b style="color:{v_clr};">{vol}</b> • 💵 Durum: <b style="color:#FFF;">{durum}</b></div>
+            <div style="color:{b_clr}; font-weight:800; font-size:14px;">{hac}</div>
+        </div>
+    </div>""".format(b_clr=f_bar_color, v_clr=f_vol_clr, vol=f_vol, hac=f_hac, durum=p_durum)
+    st.markdown(html_single_f, unsafe_allow_html=True)
     aktif_list = [m for m in TUM_MARKETLER if m["category"] == "Forex"]
+        
 elif secilen_sayfa == "🪙 Kripto Terminali":
+    with st.spinner("Kripto duyarlılığı sorgulanıyor..."):
+        c_val, c_status, c_color = get_crypto_fng()
+        c_vol = "Yüksek 🔥" if c_val > 65 else ("Düşük 💤" if c_val < 35 else "Normal 📊")
+        c_vol_clr = "#34D399" if c_val > 65 else ("#64748B" if c_val < 35 else "#F59E0B")
+        c_hac = "Güçlü 💰" if c_val > 55 else "Zayıf 📉"
+        
+    html_single_c = """<div style="background:#0F172A; border:1px solid #1E293B; padding:15px; border-radius:8px; margin-bottom:20px;">
+        <div style="font-size:12px; font-weight:700; color:#64748B; margin-bottom:6px;">🪙 CANLI KRİPTO DUYARLILIĞI VE ANALİZİ (BTC/ETH)</div>
+        <div style="background:#1E293B; height:8px; border-radius:4px; overflow:hidden; margin-bottom:10px;"><div style="background:{clr}; width:{val}%; height:8px;"></div></div>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="font-size:12px; color:#94A3B8;">⚡ Volatilite: <b style="color:{v_clr};">{vol}</b> • 💵 Gerçek Hacim: <b style="color:#FFF;">{hac}</b></div>
+            <div style="color:{clr}; font-weight:800; font-size:15px;">{stat} ({val}/100)</div>
+        </div>
+    </div>""".format(clr=c_color, val=c_val, v_clr=c_vol_clr, vol=c_vol, hac=c_hac, stat=c_status)
+    st.markdown(html_single_c, unsafe_allow_html=True)
     aktif_list = [m for m in TUM_MARKETLER if m["category"] == "Kripto"]
+
 elif secilen_sayfa == "🇺🇸 NASDAQ Terminali":
+    with st.spinner("NASDAQ dinamikleri hesaplanıyor..."):
+        n_vol, n_vol_clr, n_hac = get_real_market_dynamics(["AAPL", "TSLA", "NVDA", "MSFT"])
+        n_bar_color = "#EF4444" if "Kapalı" in n_hac else ("#10B981" if "Güçlü" in n_hac else "#94A3B8")
+        p_durum = dinamik_piyasa_durumu("NASDAQ")
+        
+    html_single_n = """<div style="background:#0F172A; border:1px solid #1E293B; padding:15px; border-radius:8px; margin-bottom:20px;">
+        <div style="font-size:12px; font-weight:700; color:#64748B; margin-bottom:6px;">🇺🇸 ABD TEKNOLOJİ BORSASI DİNAMİKLERİ (NASDAQ)</div>
+        <div style="background:#1E293B; height:8px; border-radius:4px; overflow:hidden; margin-bottom:10px;"><div style="background:{b_clr}; width:100%; height:8px;"></div></div>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="font-size:12px; color:#94A3B8;">⚡ Volatilite (ATR): <b style="color:{v_clr};">{vol}</b> • 💵 Durum: <b style="color:#FFF;">{durum}</b></div>
+            <div style="color:{b_clr}; font-weight:800; font-size:15px;">{hac}</div>
+        </div>
+    </div>""".format(b_clr=n_bar_color, v_clr=n_vol_clr, vol=n_vol, hac=n_hac, durum=p_durum)
+    st.markdown(html_single_n, unsafe_allow_html=True)
     aktif_list = [m for m in TUM_MARKETLER if m["category"] == "NASDAQ"]
+
 elif secilen_sayfa == "👑 Emtia Terminali":
+    with st.spinner("Emtia verileri analiz ediliyor..."):
+        e_vol, e_vol_clr, e_hac = get_real_market_dynamics(["GC=F", "SI=F"])
+        e_bar_color = "#EF4444" if "Kapalı" in e_hac else ("#10B981" if "Güçlü" in e_hac else "#94A3B8")
+        p_durum = dinamik_piyasa_durumu("Emtia")
+        
+    html_single_e = """<div style="background:#0F172A; border:1px solid #1E293B; padding:15px; border-radius:8px; margin-bottom:20px;">
+        <div style="font-size:12px; font-weight:700; color:#64748B; margin-bottom:6px;">👑 DEĞERLİ METAL PİYASA PSİKOLOJİSİ (ALTIN/GÜMÜŞ)</div>
+        <div style="background:#1E293B; height:8px; border-radius:4px; overflow:hidden; margin-bottom:10px;"><div style="background:{b_clr}; width:100%; height:8px;"></div></div>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="font-size:12px; color:#94A3B8;">⚡ Volatilite (ATR): <b style="color:{v_clr};">{vol}</b> • 💵 Durum: <b style="color:#FFF;">{durum}</b></div>
+            <div style="color:{b_clr}; font-weight:800; font-size:15px;">{hac}</div>
+        </div>
+    </div>""".format(b_clr=e_bar_color, v_clr=e_vol_clr, vol=e_vol, hac=e_hac, durum=p_durum)
+    st.markdown(html_single_e, unsafe_allow_html=True)
     aktif_list = [m for m in TUM_MARKETLER if m["category"] == "Emtia"]
+
 elif secilen_sayfa == "🇹🇷 BIST Terminali":
     aktif_list = [m for m in TUM_MARKETLER if m["category"] == "BIST"]
+
 elif secilen_sayfa == "✨ Özel İzleme Listesi":
     aktif_list = st.session_state.ozel_semboller
 
-# --- TRADINGVIEW GRAFİĞİ ---
+# --- TRADINGVIEW MODAL MOTORU ---
 if st.session_state.chart_open:
     c_market = st.session_state.chart_open
     st.markdown("### 📊 Canlı Grafik: {} ({})".format(c_market['name'], c_market['tv']))
@@ -581,7 +675,7 @@ if st.button(f"🚀 {sayfa_adi_temiz} İçin Sinyal Taraması Başlat"):
     if not aktif_list:
         st.warning("Bu listede taranacak sembol bulunamadı.")
     else:
-        st.info("⚡ Çok Katmanlı Asenkron Tarama Başlatıldı...")
+        st.info("⚡ Asenkron (Paralel) Tarama başlatıldı...")
         ilerleme_cubugu = st.progress(0)
         durum_metni = st.empty()
         
@@ -606,37 +700,53 @@ if st.button(f"🚀 {sayfa_adi_temiz} İçin Sinyal Taraması Başlat"):
                 durum_metni.markdown(f"**⚡ Paralel İşleniyor:** {tamamlanan}/{toplam_varlik} piyasa tamamlandı.")
                 ilerleme_cubugu.progress(tamamlanan / toplam_varlik)
                 
-        durum_metni.success("✅ Tarama tamamlandı! Kurumsal kalitede sinyaller aşağıda.")
+        durum_metni.success("✅ Tarama tamamlandı! Rozetli sinyaller aşağıda listeleniyor.")
         st.session_state.results = yeni_sonuclar
         st.rerun()
 
-# --- SİNYAL KARTLARI ---
-valid_signals = dict(
-    sorted(
-        ((k, v) for k, v in st.session_state.results.items() if v["market"] in aktif_list),
-        key=lambda x: x[1]["result"].get("skor", 0),
-        reverse=True
-    )
-)
+# --- SİNYAL KARTLARI (ROZET VE DRAWDOWN/REBOUND EKLİ - GERİ GELDİ) ---
+ham_sinyaller = {k: v for k, v in st.session_state.results.items() if v["market"] in aktif_list}
+if st.session_state.strict_mode:
+    ham_sinyaller = {k: v for k, v in ham_sinyaller.items() if v["result"].get("skor", 0) >= 5}
+
+valid_signals = dict(sorted(ham_sinyaller.items(), key=lambda x: x[1]["result"].get("skor", 0), reverse=True))
 
 if not valid_signals:
-    st.info("Bu odada 5 yıldızlı onaya (Confluence) sahip güçlü bir sinyal bulunamadı. Filtreyi test etmek istersen soldan 'Zaman & Skor Filtresini Kaldır' seçeneğini açabilirsin.")
+    st.info("Piyasada 'olgun ve taze' bir Doji bulunamadı. Sol menüden 'Zaman Filtresini Kaldır' seçeneğini açarak daha eski sinyallere bakabilirsin.")
 else:
     for sym, data in valid_signals.items():
         m, r = data["market"], data["result"]
         is_buy = r["signal"] == "BUY"
         is_confluence = (is_buy and r["bigTrend"] == "Boğa (Yukarı)") or (not is_buy and r["bigTrend"] == "Ayı (Aşağı)")
         
-        yildiz = "⭐" * r.get("skor", 0)
+        skor_seviyesi = r.get("skor", 0)
+        if skor_seviyesi >= 7: rozet_metni, rozet_ikon = "Elmas Rozet (Kusursuz Fırsat)", "💎"
+        elif skor_seviyesi >= 5: rozet_metni, rozet_ikon = "Altın Rozet (Güçlü Sinyal)", "🥇"
+        elif skor_seviyesi >= 3: rozet_metni, rozet_ikon = "Gümüş Rozet (Orta Potansiyel)", "🥈"
+        else: rozet_metni, rozet_ikon = "Bronz Rozet (İzleme Amaçlı)", "🥉"
         
         with st.container(border=True):
             col1, col2, col3 = st.columns([2, 1, 1])
             
             with col1:
                 st.subheader(f"{m['name']}  :{'green' if is_buy else 'red'}[{r['signal']}]")
-                st.write(f"🌟 **Sinyal Gücü:** {yildiz} ({r.get('skor',0)}/8 Skoru)")
+                st.write(f"{rozet_ikon} **Skor:** {skor_seviyesi}/8 — {rozet_metni}")
                 st.write(f"⏳ **Doji Yaşı:** {r['hoursAgo']} Mum Önce ({r['dojiType']} Doji)")
-                st.caption(f"**Büyük Trend (4h):** {r['bigTrend']} | {'🔥 Uyumlu' if is_confluence else '⚠️ Riskli'}")
+                st.caption(f"**Büyük Trend (4h):** {r['bigTrend']} | {'🔥 Uyumlu' if is_confluence else '⚠️ Trend Tersi Riskli'}")
+                
+                # --- DRAWDOWN / REBOUND TUZAK BİLGİLERİ (GERİ GELDİ) ---
+                if not is_buy:
+                    rb = r.get("reboundPct", 0.0)
+                    if rb >= 2.0: st.error(f"🚨 Aşırı Tepe Fırsatı (+%{rb:.2f}) - Güçlü Satış Fırsatı")
+                    elif rb >= 1.0: st.warning(f"🔥 Güçlü Tepe Fırsatı (+%{rb:.2f})")
+                    elif rb >= 0.4: st.info(f"⚠️ Orta Tepe Fırsatı (+%{rb:.2f})")
+                    elif rb > 0: st.success(f"💤 Zayıf Tepe Fırsatı (+%{rb:.2f})")
+                else:
+                    dd = r.get("drawdownPct", 0.0)
+                    if dd >= 2.0: st.success(f"🚨 Aşırı Dip Fırsatı (-%{dd:.2f}) - Güçlü Alış Fırsatı")
+                    elif dd >= 1.0: st.info(f"🔥 Güçlü Dip Fırsatı (-%{dd:.2f})")
+                    elif dd >= 0.4: st.warning(f"⚠️ Orta Dip Fırsatı (-%{dd:.2f})")
+                    elif dd > 0: st.error(f"💤 Zayıf Dip Fırsatı (-%{dd:.2f})")
                 
                 if "topFeatures" in r and r["topFeatures"]:
                     feat_str = " • ".join([f"{k}: %{v:.1f}" for k, v in r["topFeatures"].items()])
