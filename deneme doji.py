@@ -686,7 +686,10 @@ if st.session_state.strict_mode:
 valid_signals = dict(
     sorted(
         ham_sinyaller.items(), 
-        key=lambda x: x[1]["result"].get("winRate", 0), 
+        key=lambda x: (
+            x[1]["result"].get("reboundPct", 0.0),  # 1. Öncelik: Tepe Fırsatları (SELL için yukarı esnemeler) büyükten küçüğe
+            x[1]["result"].get("drawdownPct", 0.0)  # 2. Öncelik: Dip Fırsatları (BUY için aşağı esnemeler) büyükten küçüğe
+        ), 
         reverse=True
     )
 )
