@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AI Doji Terminali - v6.6 (Win-Rate Sıralaması, UI İyileştirmeleri, Alarm Temizlendi)
+AI Doji Terminali - v6.6 (Win-Rate Sıralaması, UI İyileştirmeleri, Yapısal PA Filtresi Entegre)
 """
 
 import streamlit as st
@@ -331,22 +331,6 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
             
         signal = "BUY" if tahmin_yon == 1 else "SELL"
         
-        # --- SKORLAMA ---
-        big_trend = buyuk_trend_kontrol(market["symbol"])
-        is_confluence = (signal == "BUY" and big_trend == "Boğa (Yukarı)") or (signal == "SELL" and big_trend == "Ayı (Aşağı)")
-        
-        price_to_bb = float(df['Price_to_BB'].iloc[-1])
-        macd_hist = float(df['MACD_Hist'].iloc[-1])
-        rsi_val = float(df['RSI'].iloc[-1])
-        
-        skor = 0
-        if guven_orani >= 65: skor += 2
-        elif guven_orani >= 55: skor += 1
-        if is_confluence: skor += 2
-        if (signal == "BUY" and rsi_val < 35) or (signal == "SELL" and rsi_val > 65): skor += 2
-        if (signal == "BUY" and price_to_bb < 0.2) or (signal == "SELL" and price_to_bb > 0.8): skor += 1
-        if (signal == "BUY" and macd_hist > 0) or (signal == "SELL" and macd_hist < 0): skor += 1
-        
         doji_iloc = len(df) - 1 
         if gecen_mum > 0:
             doji_gercek_sira = tam_veri_uzunlugu - 1 - gecen_mum
@@ -366,20 +350,64 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
         # --- TEPE VE DİP FIRSATI HESAPLAMA (DRAWDOWN/REBOUND) ---
         rebound_pct = 0.0
         drawdown_pct = 0.0
+        yapisal_short_guclu = False 
+        yapisal_long_guclu = False  
         
         if gecen_mum > 0:
             gelecek_mumlar_high = df['High'].iloc[doji_iloc + 1:]
             gelecek_mumlar_low = df['Low'].iloc[doji_iloc + 1:]
+            gelecek_mumlar_close = df['Close'].iloc[doji_iloc + 1:]
             
             if not gelecek_mumlar_high.empty:
                 doji_close = float(df['Close'].iloc[doji_iloc])
+                doji_low = float(df['Low'].iloc[doji_iloc])
+                doji_high = float(df['High'].iloc[doji_iloc])
+                anlik_fiyat_kontrol = float(df['Close'].iloc[-1])
+                
                 if doji_close > 0:
                     if signal == "SELL":
                         peak_after = float(gelecek_mumlar_high.max())
                         rebound_pct = round(((peak_after - doji_close) / doji_close) * 100, 2)
+                        
+                        # --- 6 HAZİRAN PA ALGORİTMASI (SHORT) ---
+                        en_dusuk_alinmadi = float(gelecek_mumlar_low.min()) >= doji_low
+                        altinda_kapanis_yok = float(gelecek_mumlar_close.min()) >= doji_close
+                        
+                        if (en_dusuk_alinmadi or altinda_kapanis_yok) and (anlik_fiyat_kontrol > doji_close):
+                            yapisal_short_guclu = True
+                            
                     elif signal == "BUY":
                         dip_after = float(gelecek_mumlar_low.min())
                         drawdown_pct = round(((doji_close - dip_after) / doji_close) * 100, 2)
+                        
+                        # --- SİMETRİK PA ALGORİTMASI (LONG) ---
+                        en_yuksek_alinmadi = float(gelecek_mumlar_high.max()) <= doji_high
+                        ustunde_kapanis_yok = float(gelecek_mumlar_close.max()) <= doji_close
+                        
+                        if (en_yuksek_alinmadi or ustunde_kapanis_yok) and (anlik_fiyat_kontrol < doji_close):
+                            yapisal_long_guclu = True
+
+        # --- SKORLAMA MOTORU ---
+        big_trend = buyuk_trend_kontrol(market["symbol"])
+        is_confluence = (signal == "BUY" and big_trend == "Boğa (Yukarı)") or (signal == "SELL" and big_trend == "Ayı (Aşağı)")
+        
+        price_to_bb = float(df['Price_to_BB'].iloc[-1])
+        macd_hist = float(df['MACD_Hist'].iloc[-1])
+        rsi_val = float(df['RSI'].iloc[-1])
+        
+        skor = 0
+        if guven_orani >= 65: skor += 2
+        elif guven_orani >= 55: skor += 1
+        if is_confluence: skor += 2
+        if (signal == "BUY" and rsi_val < 35) or (signal == "SELL" and rsi_val > 65): skor += 2
+        if (signal == "BUY" and price_to_bb < 0.2) or (signal == "SELL" and price_to_bb > 0.8): skor += 1
+        if (signal == "BUY" and macd_hist > 0) or (signal == "SELL" and macd_hist < 0): skor += 1
+        
+        # PA Yapısal Ek Puanları
+        if signal == "SELL" and yapisal_short_guclu:
+            skor += 2
+        elif signal == "BUY" and yapisal_long_guclu:
+            skor += 2
         
         return {
             "hoursAgo": gecen_mum, "signal": signal, "rsi": rsi_val, "confidence": guven_orani,
@@ -387,7 +415,9 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
             "price": float(df['Close'].iloc[-1]), "skor": skor,
             "change": float(((df['Close'].iloc[-1] - df['Open'].iloc[-_lookback]) / (df['Open'].iloc[-_lookback] + 1e-10)) * 100),
             "dojiType": doji_type, "topFeatures": en_etkili_faktorler,
-            "reboundPct": rebound_pct, "drawdownPct": drawdown_pct
+            "reboundPct": rebound_pct, "drawdownPct": drawdown_pct,
+            "yapisalShortGuclu": yapisal_short_guclu,
+            "yapisalLongGuclu": yapisal_long_guclu
         }
     except Exception as e:
         hata_mesaji = f"{market['symbol']} Hatası: {str(e)}\n{traceback.format_exc()}"
@@ -653,7 +683,6 @@ ham_sinyaller = {k: v for k, v in st.session_state.results.items() if v["market"
 if st.session_state.strict_mode:
     ham_sinyaller = {k: v for k, v in ham_sinyaller.items() if v["result"].get("skor", 0) >= 5}
 
-# DÜZELTME 1: Sıralama motoru tekrar Win-Rate bazlı çalışacak şekilde ayarlandı
 valid_signals = dict(
     sorted(
         ham_sinyaller.items(), 
@@ -681,30 +710,47 @@ else:
             
             with col1:
                 st.subheader(f"{m['name']}  :{'green' if is_buy else 'red'}[{r['signal']}]")
-                st.write(f"{rozet_ikon} **Skor:** {skor_seviyesi}/8 — {rozet_metni}")
+                st.write(f"{rozet_ikon} **Skor:** {skor_seviyesi}/10 — {rozet_metni}")
                 st.write(f"⏳ **Doji Yaşı:** {r['hoursAgo']} Mum Önce ({r['dojiType']} Doji)")
                 st.caption(f"**Büyük Trend (4h):** {r['bigTrend']} | {'🔥 Uyumlu' if is_confluence else '⚠️ Trend Tersi Riskli'}")
                 
-                # --- DRAWDOWN / REBOUND TUZAK BİLGİLERİ ---
+                # --- DRAWDOWN / REBOUND TUZAK BİLGİLERİ VE PA ALERTLERİ ---
                 if not is_buy:
                     rb = r.get("reboundPct", 0.0)
                     if rb >= 2.0: st.error(f"🚨 Aşırı Tepe Fırsatı (+%{rb:.2f}) - Güçlü Satış Fırsatı")
                     elif rb >= 1.0: st.warning(f"🔥 Güçlü Tepe Fırsatı (+%{rb:.2f})")
                     elif rb >= 0.4: st.info(f"⚠️ Orta Tepe Fırsatı (+%{rb:.2f})")
                     elif rb > 0: st.success(f"💤 Zayıf Tepe Fırsatı (+%{rb:.2f})")
+                    
+                    # 6 Haziran SHORT Uyarısı
+                    if r.get("yapisalShortGuclu", False):
+                        st.markdown("""
+                        <div style='background-color: rgba(239, 68, 68, 0.15); padding: 10px; border-radius: 6px; border-left: 4px solid #EF4444; margin-top: 8px; margin-bottom: 5px;'>
+                            <span style='color: #F87171; font-weight: 700; font-size: 13px;'>🎯 6 HAZİRAN BLOK YAPISI AKTİF (SHORT GÜÇLÜ)</span><br>
+                            <span style='color: #CBD5E1; font-size: 11px;'>Sinyal mumunun en düşüğü kırılmadı veya altında gövde kapanışı gelmedi. Fiyat yukarı esnedikçe SHORT yönlü baskı ve R/R oranı maksimize oluyor! (+2 Ek Skor uygulandı)</span>
+                        </div>
+                        """, unsafe_allow_html=True)
                 else:
                     dd = r.get("drawdownPct", 0.0)
                     if dd >= 2.0: st.success(f"🚨 Aşırı Dip Fırsatı (-%{dd:.2f}) - Güçlü Alış Fırsatı")
                     elif dd >= 1.0: st.info(f"🔥 Güçlü Dip Fırsatı (-%{dd:.2f})")
                     elif dd >= 0.4: st.warning(f"⚠️ Orta Dip Fırsatı (-%{dd:.2f})")
                     elif dd > 0: st.error(f"💤 Zayıf Dip Fırsatı (-%{dd:.2f})")
+                    
+                    # Simetrik LONG Uyarısı
+                    if r.get("yapisalLongGuclu", False):
+                        st.markdown("""
+                        <div style='background-color: rgba(16, 185, 129, 0.15); padding: 10px; border-radius: 6px; border-left: 4px solid #10B981; margin-top: 8px; margin-bottom: 5px;'>
+                            <span style='color: #34D399; font-weight: 700; font-size: 13px;'>🎯 YAPISAL LONG GÜÇLENMESİ AKTİF</span><br>
+                            <span style='color: #CBD5E1; font-size: 11px;'>Sinyal mumunun tepesi yukarı kırılmadı veya üstünde kapanış gelmedi. Fiyat aşağı esnedikçe LONG yönlü maliyetlenme avantajı artıyor! (+2 Ek Skor uygulandı)</span>
+                        </div>
+                        """, unsafe_allow_html=True)
                 
                 if "topFeatures" in r and r["topFeatures"]:
                     feat_str = " • ".join([f"{k}: %{v:.1f}" for k, v in r["topFeatures"].items()])
                     st.caption(f"🧠 **Model Karar Etkenleri:** {feat_str}")
 
             with col2:
-                # DÜZELTME 2: Altında boş duran yazı, şık bir "?" (Tooltip) ikonuna dönüştürüldü
                 st.metric(
                     label="Model Güveni", 
                     value=f"%{int(r['confidence'])}"
