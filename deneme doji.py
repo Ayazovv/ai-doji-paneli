@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AI Doji Terminali - v6.5 (TAM SÜRÜM: İstatistik Kartları, Rozet Sistemi, Alarm Temizlendi)
+AI Doji Terminali - v6.6 (Win-Rate Sıralaması, UI İyileştirmeleri, Alarm Temizlendi)
 """
 
 import streamlit as st
@@ -15,7 +15,7 @@ import traceback
 from sklearn.model_selection import TimeSeriesSplit
 
 # --- SAYFA AYARLARI ---
-st.set_page_config(page_title="AI Doji Terminali v6.5", layout="wide", initial_sidebar_state="auto")
+st.set_page_config(page_title="AI Doji Terminali v6.6", layout="wide", initial_sidebar_state="auto")
 
 # --- HIZLANDIRICI: CACHE (ÖNBELLEK) FONKSİYONU ---
 @st.cache_data(ttl=300) 
@@ -417,7 +417,7 @@ st.markdown("""
 # --- SOL MENÜ NAVİGASYONU (SIDEBAR) ---
 st.sidebar.markdown("""
 <div style='text-align: center; padding: 10px; border-bottom: 1px solid #1E293B; margin-bottom: 20px;'>
-    <h3 style='color: #FFF; margin: 0; font-size: 16px;'>🌐 AI TERMINAL v6.5</h3>
+    <h3 style='color: #FFF; margin: 0; font-size: 16px;'>🌐 AI TERMINAL v6.6</h3>
 </div>
 """, unsafe_allow_html=True)
 
@@ -459,8 +459,8 @@ if st.session_state.hatalar:
 
 st.markdown(f"""
 <div style="background: linear-gradient(180deg, #0F172A 0%, #020817 100%); border-bottom: 1px solid #1E293B; padding: 15px; margin-bottom: 15px; border-radius: 8px;">
-    <h1 style="margin: 0; font-size: 22px; font-weight: 800; color: #FFF;">🤖 Joe Barbarov AI Terminal v6.5</h1>
-    <p style="margin: 0; font-size: 12px; color: #64748B;">Oda: <b>{secilen_sayfa}</b> • Tam Sürüm: Rozet Sistemi, UI Kartları & Drawdown/Rebound Aktif</p>
+    <h1 style="margin: 0; font-size: 22px; font-weight: 800; color: #FFF;">🤖 Joe Barbarov AI Terminal v6.6</h1>
+    <p style="margin: 0; font-size: 12px; color: #64748B;">Oda: <b>{secilen_sayfa}</b> • Win-Rate Sıralaması & Drawdown/Rebound Aktif</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -648,12 +648,19 @@ if st.button(f"🚀 {sayfa_adi_temiz} İçin Sinyal Taraması Başlat"):
         st.session_state.results = yeni_sonuclar
         st.rerun()
 
-# --- SİNYAL KARTLARI (ROZET VE DRAWDOWN/REBOUND EKLİ) ---
+# --- SİNYAL KARTLARI (WIN-RATE SIRALAMASI VE TOOLTIP DÜZELTMESİ) ---
 ham_sinyaller = {k: v for k, v in st.session_state.results.items() if v["market"] in aktif_list}
 if st.session_state.strict_mode:
     ham_sinyaller = {k: v for k, v in ham_sinyaller.items() if v["result"].get("skor", 0) >= 5}
 
-valid_signals = dict(sorted(ham_sinyaller.items(), key=lambda x: x[1]["result"].get("skor", 0), reverse=True))
+# DÜZELTME 1: Sıralama motoru tekrar Win-Rate bazlı çalışacak şekilde ayarlandı
+valid_signals = dict(
+    sorted(
+        ham_sinyaller.items(), 
+        key=lambda x: x[1]["result"].get("winRate", 0), 
+        reverse=True
+    )
+)
 
 if not valid_signals:
     st.info("Piyasada 'olgun ve taze' bir Doji bulunamadı. Sol menüden 'Zaman Filtresini Kaldır' seçeneğini açarak daha eski sinyallere bakabilirsin.")
@@ -697,9 +704,16 @@ else:
                     st.caption(f"🧠 **Model Karar Etkenleri:** {feat_str}")
 
             with col2:
-                st.metric("Model Güveni", f"%{int(r['confidence'])}")
-                st.metric("Fold Testi Win-Rate", f"%{int(r['winRate'])}")
-                st.caption("K-Fold TimeSeries Doğrulaması")
+                # DÜZELTME 2: Altında boş duran yazı, şık bir "?" (Tooltip) ikonuna dönüştürüldü
+                st.metric(
+                    label="Model Güveni", 
+                    value=f"%{int(r['confidence'])}"
+                )
+                st.metric(
+                    label="Fold Testi Win-Rate", 
+                    value=f"%{int(r['winRate'])}", 
+                    help="Bu başarı oranı rastgele değil; K-Fold TimeSeries yöntemiyle geçmişteki 5 farklı piyasa koşulunda çapraz test edilerek hesaplanmıştır."
+                )
                 
             with col3:
                 st.metric("Güncel Fiyat", f"{r['price']:,.2f}", f"{r['change']:.2f}%")
