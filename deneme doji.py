@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AI Doji Terminali - v5 (Pro XGBoost, Cache & Tam Arayüz)
+AI Doji Terminali - v5.1 (Pro XGBoost, Cache, Tam Arayüz & Kusursuz İndeksleme)
 """
 
 import streamlit as st
@@ -336,13 +336,19 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
         _lookback = {"1h": 24, "4h": 30, "1d": 5}.get(interval, 12)
         _lookback = min(_lookback, len(df) - 1)
         
+        # --- BEARISH REBOUND TRAP PUANI (AŞIRI ALIM TUZAĞI) - Gerçek Sıra Fixi ---
         rebound_pct = 0.0
         if signal == "SELL" and gecen_mum > 0:
-            doji_idx = len(df) - 1 - gecen_mum          
-            doji_close = float(df['Close'].iloc[doji_idx])
-            peak_after = float(df['High'].iloc[doji_idx + 1:].max())  
-            if doji_close > 0:
-                rebound_pct = round(((peak_after - doji_close) / doji_close) * 100, 2)
+            doji_gercek_sira = tam_veri_uzunlugu - 1 - gecen_mum
+            # DataFrame'in mevcut halinde bu sıraya sahip mumun iloc (satır numarası) konumunu buluyoruz
+            matching_indices = np.where(df['Gercek_Sira'] == doji_gercek_sira)[0]
+            
+            if len(matching_indices) > 0:
+                doji_iloc = matching_indices[0]
+                doji_close = float(df['Close'].iloc[doji_iloc])
+                peak_after = float(df['High'].iloc[doji_iloc + 1:].max())  
+                if doji_close > 0:
+                    rebound_pct = round(((peak_after - doji_close) / doji_close) * 100, 2)
         
         return {
             "hoursAgo": gecen_mum, "signal": signal, "rsi": rsi_val, "confidence": guven_orani,
