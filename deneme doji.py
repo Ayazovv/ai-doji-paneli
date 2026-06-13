@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AI Doji Terminali - v6.4 (TAM SÜRÜM: İstatistik Kartları, Rozet Sistemi, Sınırsız Alarm)
+AI Doji Terminali - v6.5 (TAM SÜRÜM: İstatistik Kartları, Rozet Sistemi, Alarm Temizlendi)
 """
 
 import streamlit as st
@@ -15,34 +15,12 @@ import traceback
 from sklearn.model_selection import TimeSeriesSplit
 
 # --- SAYFA AYARLARI ---
-st.set_page_config(page_title="AI Doji Terminali v6.4", layout="wide", initial_sidebar_state="auto")
+st.set_page_config(page_title="AI Doji Terminali v6.5", layout="wide", initial_sidebar_state="auto")
 
 # --- HIZLANDIRICI: CACHE (ÖNBELLEK) FONKSİYONU ---
 @st.cache_data(ttl=300) 
 def veri_indir(symbol, periyot, interval):
     return yf.download(symbol, period=periyot, interval=interval, progress=False)
-
-# --- GERÇEK ZAMANLI VERİ APİLERİ (ALARM İÇİN) ---
-def anlik_fiyat_kripto(cg_id):
-    try:
-        url = f"https://api.coingecko.com/api/v3/simple/price?ids={cg_id}&vs_currencies=usd"
-        response = requests.get(url, timeout=5).json()
-        return float(response[cg_id]["usd"])
-    except:
-        return None
-
-def anlik_fiyat_hisse(symbol):
-    try:
-        ticker = yf.Ticker(symbol)
-        fiyat = ticker.fast_info.get('last_price')
-        if fiyat is None:
-            df = ticker.history(period="1d")
-            if not df.empty:
-                fiyat = df['Close'].iloc[-1]
-        return float(fiyat) if fiyat else None
-    except Exception as e:
-        st.session_state.setdefault("hatalar", []).append(f"Alarm Fiyatı Çekilemedi ({symbol}): {str(e)}")
-        return None
 
 # --- GLOBAL PİYASA TANIMLARI ---
 MARKETS = [
@@ -56,10 +34,10 @@ MARKETS = [
     {"name": "Tesla", "symbol": "TSLA", "tv": "NASDAQ:TSLA", "category": "NASDAQ", "color": "#EF4444"},
     {"name": "NVIDIA", "symbol": "NVDA", "tv": "NASDAQ:NVDA", "category": "NASDAQ", "color": "#10B981"},
     {"name": "Microsoft", "symbol": "MSFT", "tv": "NASDAQ:MSFT", "category": "NASDAQ", "color": "#3B82F6"},
-    {"name": "Bitcoin", "symbol": "BTC-USD", "tv": "BINANCE:BTCUSDT", "category": "Kripto", "cg_id": "bitcoin", "color": "#F59E0B"},
-    {"name": "Ethereum", "symbol": "ETH-USD", "tv": "BINANCE:ETHUSDT", "category": "Kripto", "cg_id": "ethereum", "color": "#6366F1"},
-    {"name": "Solana", "symbol": "SOL-USD", "tv": "BINANCE:SOLUSDT", "category": "Kripto", "cg_id": "solana", "color": "#14B8A6"},
-    {"name": "BNB", "symbol": "BNB-USD", "tv": "BINANCE:BNBUSDT", "category": "Kripto", "cg_id": "binancecoin", "color": "#EAB308"},
+    {"name": "Bitcoin", "symbol": "BTC-USD", "tv": "BINANCE:BTCUSDT", "category": "Kripto", "color": "#F59E0B"},
+    {"name": "Ethereum", "symbol": "ETH-USD", "tv": "BINANCE:ETHUSDT", "category": "Kripto", "color": "#6366F1"},
+    {"name": "Solana", "symbol": "SOL-USD", "tv": "BINANCE:SOLUSDT", "category": "Kripto", "color": "#14B8A6"},
+    {"name": "BNB", "symbol": "BNB-USD", "tv": "BINANCE:BNBUSDT", "category": "Kripto", "color": "#EAB308"},
     {"name": "BIST 100", "symbol": "XU100.IS", "tv": "BIST:XU100", "category": "BIST", "color": "#06B6D4"},
     {"name": "Garanti BBVA", "symbol": "GARAN.IS", "tv": "BIST:GARAN", "category": "BIST", "color": "#10B981"}
 ]
@@ -301,7 +279,7 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
                 mum_yasi = tam_veri_uzunlugu - 1 - orijinal_sira
                 if min_mum <= mum_yasi <= max_mum: 
                     olgun_dojiler.append(mum_yasi)
-                elif is_forced: # Zaman filtresi kaldırıldıysa her halükarda ekle
+                elif is_forced:
                     olgun_dojiler.append(mum_yasi)
                     
         if not olgun_dojiler: 
@@ -385,7 +363,7 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
         _lookback = {"1h": 24, "4h": 30, "1d": 5}.get(interval, 12)
         _lookback = min(_lookback, len(df) - 1)
         
-        # --- TEPE VE DİP FIRSATI HESAPLAMA (DRAWDOWN/REBOUND - GERİ GELDİ) ---
+        # --- TEPE VE DİP FIRSATI HESAPLAMA (DRAWDOWN/REBOUND) ---
         rebound_pct = 0.0
         drawdown_pct = 0.0
         
@@ -423,7 +401,6 @@ if "force_past" not in st.session_state: st.session_state.force_past = False
 if "strict_mode" not in st.session_state: st.session_state.strict_mode = False
 if "hatalar" not in st.session_state: st.session_state.hatalar = []
 if "ozel_semboller" not in st.session_state: st.session_state.ozel_semboller = []
-if "alarmlar" not in st.session_state: st.session_state.alarmlar = []
 
 TUM_MARKETLER = MARKETS + st.session_state.ozel_semboller
 
@@ -440,7 +417,7 @@ st.markdown("""
 # --- SOL MENÜ NAVİGASYONU (SIDEBAR) ---
 st.sidebar.markdown("""
 <div style='text-align: center; padding: 10px; border-bottom: 1px solid #1E293B; margin-bottom: 20px;'>
-    <h3 style='color: #FFF; margin: 0; font-size: 16px;'>🌐 AI TERMINAL v6.4</h3>
+    <h3 style='color: #FFF; margin: 0; font-size: 16px;'>🌐 AI TERMINAL v6.5</h3>
 </div>
 """, unsafe_allow_html=True)
 
@@ -467,23 +444,6 @@ if st.sidebar.button("Listeye Ekle") and ozel_sembol:
     st.rerun()
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("🔔 Canlı Fiyat Alarmı")
-alarm_secilen = st.sidebar.selectbox("Sembol Seç", [m["name"] for m in TUM_MARKETLER])
-alarm_hedef = st.sidebar.number_input("Hedef Fiyat ($ / TL)", min_value=0.0, format="%.4f")
-if st.sidebar.button("Alarm Kur"):
-    secili_market = next(m for m in TUM_MARKETLER if m["name"] == alarm_secilen)
-    st.session_state.alarmlar.append({"market": secili_market, "hedef": alarm_hedef})
-    st.sidebar.success("Alarm Kuruldu!")
-
-if st.session_state.alarmlar:
-    st.sidebar.markdown("**Aktif Alarmlar:**")
-    for idx, alarm in enumerate(st.session_state.alarmlar):
-        st.sidebar.caption(f"🎯 {alarm['market']['name']} -> {alarm['hedef']}")
-        if st.sidebar.button("Sil", key=f"del_alarm_{idx}"):
-            st.session_state.alarmlar.pop(idx)
-            st.rerun()
-
-st.sidebar.markdown("---")
 st.sidebar.subheader("🛠️ Sistem Test & Görünüm")
 st.session_state.force_past = st.sidebar.checkbox("🔓 Zaman Filtresini Kaldır (Eski Dojileri Bul)", value=st.session_state.force_past)
 st.session_state.strict_mode = st.sidebar.checkbox("🔒 Skor Filtresi (Sadece 5+ Rozetleri Göster)", value=st.session_state.strict_mode)
@@ -499,28 +459,12 @@ if st.session_state.hatalar:
 
 st.markdown(f"""
 <div style="background: linear-gradient(180deg, #0F172A 0%, #020817 100%); border-bottom: 1px solid #1E293B; padding: 15px; margin-bottom: 15px; border-radius: 8px;">
-    <h1 style="margin: 0; font-size: 22px; font-weight: 800; color: #FFF;">🤖 Joe Barbarov AI Terminal v6.4</h1>
+    <h1 style="margin: 0; font-size: 22px; font-weight: 800; color: #FFF;">🤖 Joe Barbarov AI Terminal v6.5</h1>
     <p style="margin: 0; font-size: 12px; color: #64748B;">Oda: <b>{secilen_sayfa}</b> • Tam Sürüm: Rozet Sistemi, UI Kartları & Drawdown/Rebound Aktif</p>
 </div>
 """, unsafe_allow_html=True)
 
-# --- ALARM KONTROL DÖNGÜSÜ ---
-if st.session_state.alarmlar:
-    st.warning("⏱️ **Arka Plan Alarmları Kontrol Ediliyor...**")
-    for alarm in st.session_state.alarmlar:
-        anlik = None
-        m = alarm["market"]
-        if m["category"] == "Kripto" and "cg_id" in m:
-            anlik = anlik_fiyat_kripto(m["cg_id"])
-        elif m["category"] in ["NASDAQ", "Forex", "Emtia", "BIST", "Özel"]:
-            anlik = anlik_fiyat_hisse(m["symbol"])
-            
-        if anlik:
-            fark = abs(anlik - alarm["hedef"]) / alarm["hedef"]
-            if fark < 0.005: 
-                st.error(f"🚨 **ALARM TETİKLENDİ:** {m['name']} hedef fiyata ({alarm['hedef']}) ulaştı! (Anlık: {anlik})")
-
-# --- PANEL İÇERİĞİ VE GÖRSEL KARTLAR (GERİ GELDİ) ---
+# --- PANEL İÇERİĞİ VE GÖRSEL KARTLAR ---
 aktif_list = []
 
 if secilen_sayfa == "🏠 Genel Dashboard":
@@ -704,7 +648,7 @@ if st.button(f"🚀 {sayfa_adi_temiz} İçin Sinyal Taraması Başlat"):
         st.session_state.results = yeni_sonuclar
         st.rerun()
 
-# --- SİNYAL KARTLARI (ROZET VE DRAWDOWN/REBOUND EKLİ - GERİ GELDİ) ---
+# --- SİNYAL KARTLARI (ROZET VE DRAWDOWN/REBOUND EKLİ) ---
 ham_sinyaller = {k: v for k, v in st.session_state.results.items() if v["market"] in aktif_list}
 if st.session_state.strict_mode:
     ham_sinyaller = {k: v for k, v in ham_sinyaller.items() if v["result"].get("skor", 0) >= 5}
@@ -734,7 +678,7 @@ else:
                 st.write(f"⏳ **Doji Yaşı:** {r['hoursAgo']} Mum Önce ({r['dojiType']} Doji)")
                 st.caption(f"**Büyük Trend (4h):** {r['bigTrend']} | {'🔥 Uyumlu' if is_confluence else '⚠️ Trend Tersi Riskli'}")
                 
-                # --- DRAWDOWN / REBOUND TUZAK BİLGİLERİ (GERİ GELDİ) ---
+                # --- DRAWDOWN / REBOUND TUZAK BİLGİLERİ ---
                 if not is_buy:
                     rb = r.get("reboundPct", 0.0)
                     if rb >= 2.0: st.error(f"🚨 Aşırı Tepe Fırsatı (+%{rb:.2f}) - Güçlü Satış Fırsatı")
