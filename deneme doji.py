@@ -336,7 +336,7 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
         _lookback = {"1h": 24, "4h": 30, "1d": 5}.get(interval, 12)
         _lookback = min(_lookback, len(df) - 1)
         
-        # --- BEARISH REBOUND TRAP PUANI (AŞIRI ALIM TUZAĞI) - Gerçek Sıra Fixi ---
+        # --- BEARISH REBOUND TRAP PUANI (AŞIRI ALIM TUZAĞI) - Gerçek Sıra & Boş Dilim Fixi ---
         rebound_pct = 0.0
         if signal == "SELL" and gecen_mum > 0:
             doji_gercek_sira = tam_veri_uzunlugu - 1 - gecen_mum
@@ -345,10 +345,14 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
             
             if len(matching_indices) > 0:
                 doji_iloc = matching_indices[0]
-                doji_close = float(df['Close'].iloc[doji_iloc])
-                peak_after = float(df['High'].iloc[doji_iloc + 1:].max())  
-                if doji_close > 0:
-                    rebound_pct = round(((peak_after - doji_close) / doji_close) * 100, 2)
+                gelecek_mumlar = df['High'].iloc[doji_iloc + 1:]
+                
+                # SADECE doji son satır değilse (yani ilerisinde mum varsa) hesapla
+                if not gelecek_mumlar.empty:
+                    doji_close = float(df['Close'].iloc[doji_iloc])
+                    peak_after = float(gelecek_mumlar.max())  
+                    if doji_close > 0:
+                        rebound_pct = round(((peak_after - doji_close) / doji_close) * 100, 2)
         
         return {
             "hoursAgo": gecen_mum, "signal": signal, "rsi": rsi_val, "confidence": guven_orani,
