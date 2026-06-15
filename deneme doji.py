@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AI Doji Terminali - v6.9.2 (Senkronize Eğitim Pencereleri ve Optimizasyonlar)
+AI Doji Terminali - v6.9.3 (Kusursuz ML Hedef Hizalaması ve Dönüş Mantığı)
 """
 
 import streamlit as st
@@ -15,7 +15,7 @@ import traceback
 from sklearn.model_selection import TimeSeriesSplit
 
 # --- SAYFA AYARLARI ---
-st.set_page_config(page_title="AI Doji Terminali v6.9.2", layout="wide", initial_sidebar_state="auto")
+st.set_page_config(page_title="AI Doji Terminali v6.9.3", layout="wide", initial_sidebar_state="auto")
 
 # --- HIZLANDIRICI: CACHE (ÖNBELLEK) FONKSİYONU ---
 @st.cache_data(ttl=300) 
@@ -152,7 +152,6 @@ def dinamik_piyasa_durumu(kategori="Genel"):
         
     if kategori in ["Forex", "Emtia"]:
         if gun == 5: return "Kapalı 💤"
-        # Not: gun == 6 (Pazar) saat 22:00 UTC'ye kadar kapalıdır.
         if gun == 6 and saat < 22: return "Kapalı 💤"
         if gun == 4 and saat >= 21: return "Kapalı 💤"
         return "Açık 🟢"
@@ -275,12 +274,12 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
         
         suanki_fiyat = df['Close']
         ilerideki_kapanis = df['Close'].shift(-int(min_hours))
-        indexer = pd.api.indexers.FixedForwardWindowIndexer(window_size=int(min_hours))
         
-        # DÜZELTME: FixedForwardWindowIndexer ile shift(-1) tam uyumlu hale getirildi. 
-        # Sadece mevcut mumdan SONRAKİ N mumun aralığı taranır.
-        ilerideki_min = df['Low'].shift(-1).rolling(window=indexer).min()
-        ilerideki_max = df['High'].shift(-1).rolling(window=indexer).max()
+        # 🔴 KRİTİK DÜZELTME: FixedForwardWindowIndexer Çöpe Atıldı!
+        # Matematiksel olarak kusursuz hizalama: N mumluk geriye dönük min/max hesaplanır,
+        # ardından bu değerler tam N mum geriye itilerek (shift) i. muma i+1'den i+N'ye kadar olan aralık kusursuzca hizalanır.
+        ilerideki_min = df['Low'].rolling(window=int(min_hours)).min().shift(-int(min_hours))
+        ilerideki_max = df['High'].rolling(window=int(min_hours)).max().shift(-int(min_hours))
         
         if market["category"] == "Forex": marj = 0.002    
         elif market["category"] == "Kripto": marj = 0.012 
@@ -309,7 +308,6 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
         son_50_mum = df.tail(50)
         doji_olanlar = son_50_mum[son_50_mum['Doji'] == True]
         
-        # DÜZELTME: Günlük periyotta doji penceresi genişletildi
         if interval == "1h": min_mum, max_mum = 4, 10  
         elif interval == "4h": min_mum, max_mum = 1, 3   
         else: min_mum, max_mum = 1, 5   
@@ -398,7 +396,8 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
         else: doji_type = "Standard"    
         
         _lookback = {"1h": 24, "4h": 30, "1d": 5}.get(interval, 12)
-        _lookback = min(_lookback, len(df) - 1)
+        # 🟡 DÜZELTME: Lookback eksiye veya sıfıra düşmesin diye sınır eklendi
+        _lookback = max(1, min(_lookback, len(df) - 1))
         
         rebound_pct = 0.0
         drawdown_pct = 0.0
@@ -449,7 +448,9 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
         if is_confluence: skor += 2
         if (signal == "BUY" and rsi_val < 35) or (signal == "SELL" and rsi_val > 65): skor += 2
         if (signal == "BUY" and price_to_bb < 0.2) or (signal == "SELL" and price_to_bb > 0.8): skor += 1
-        if (signal == "BUY" and macd_hist > 0) or (signal == "SELL" and macd_hist < 0): skor += 1
+        
+        # 🟡 DÜZELTME: Doji formasyonları dönüş arar. MACD uyumsuzluğu (ters bölgede olma) skor artırır.
+        if (signal == "BUY" and macd_hist < 0) or (signal == "SELL" and macd_hist > 0): skor += 1
         if signal == "SELL" and yapisal_short_guclu: skor += 2
         elif signal == "BUY" and yapisal_long_guclu: skor += 2
         
@@ -457,8 +458,6 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
             
         gosterim_fiyati = gercek_canli_fiyat
         
-        # DÜZELTME: Kripto piyasaları için yf.download üzerinden tekrarlanan yüklenme durduruldu.
-        # Live Spot yaması artık yalnızca gecikme yaşanan Emtia için çalışıyor.
         if market["category"] == "Emtia":
             spot_sym = "XAUUSD=X" if "Altın" in market["name"] else ("XAGUSD=X" if "Gümüş" in market["name"] else market["symbol"])
             canli_fiyat = canli_spot_cek(spot_sym)
@@ -503,7 +502,7 @@ st.markdown("""
 # --- SOL MENÜ NAVİGASYONU (SIDEBAR) ---
 st.sidebar.markdown("""
 <div style='text-align: center; padding: 10px; border-bottom: 1px solid #1E293B; margin-bottom: 20px;'>
-    <h3 style='color: #FFF; margin: 0; font-size: 16px;'>🌐 AI TERMINAL v6.9.2</h3>
+    <h3 style='color: #FFF; margin: 0; font-size: 16px;'>🌐 AI TERMINAL v6.9.3</h3>
 </div>
 """, unsafe_allow_html=True)
 
@@ -547,7 +546,7 @@ if st.session_state.hatalar:
 
 st.markdown(f"""
 <div style="background: linear-gradient(180deg, #0F172A 0%, #020817 100%); border-bottom: 1px solid #1E293B; padding: 15px; margin-bottom: 15px; border-radius: 8px;">
-    <h1 style="margin: 0; font-size: 22px; font-weight: 800; color: #FFF;">🤖 Joe Barbarov AI Terminal v6.9.2</h1>
+    <h1 style="margin: 0; font-size: 22px; font-weight: 800; color: #FFF;">🤖 Joe Barbarov AI Terminal v6.9.3</h1>
     <p style="margin: 0; font-size: 12px; color: #64748B;">Oda: <b>{secilen_sayfa}</b> • Gerçek Zamanlı Veri İşleme & PA Fırsat Sıralaması</p>
 </div>
 """, unsafe_allow_html=True)
@@ -744,7 +743,6 @@ ham_sinyaller = {k: v for k, v in st.session_state.results.items() if v["market"
 if st.session_state.strict_mode:
     ham_sinyaller = {k: v for k, v in ham_sinyaller.items() if v["result"].get("skor", 0) >= 5}
 
-# DÜZELTME: Sıralama yaparken BUY ve SELL fark etmeksizin en yüksek fırsat (Rebound vs Drawdown max değeri) baz alındı.
 valid_signals = dict(
     sorted(
         ham_sinyaller.items(), 
