@@ -307,8 +307,16 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
         gecen_mum = min(olgun_dojiler)
             
         # --- YAPAY ZEKA EĞİTİM VE CANLI TAHMİN ---
-        X = train_df[features]
-        y = train_df['Hedef']
+        # Eğitimi tüm mumlarda değil, SADECE geçmişteki Doji'ler üzerinde yap
+        doji_train_df = train_df[train_df['Doji'] == True]
+        
+        if len(doji_train_df) >= 20: 
+            X = doji_train_df[features]
+            y = doji_train_df['Hedef']
+        else:
+            X = train_df[features]
+            y = train_df['Hedef']
+        
         win_rate, toplam_sinyal = 50, 0
         en_etkili_faktorler = {}
         
