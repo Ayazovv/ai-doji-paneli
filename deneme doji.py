@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AI Doji Terminali - v6.9.5 (Canlı Spot Fiyatın Tepe/Dip Oranlarına Kusursuz Entegrasyonu)
+AI Doji Terminali - v6.9.6 (Canlı Fiyat Entegrasyonu ve Fırsat Senkronizasyonu)
 """
 
 import streamlit as st
@@ -15,7 +15,7 @@ import traceback
 from sklearn.model_selection import TimeSeriesSplit
 
 # --- SAYFA AYARLARI ---
-st.set_page_config(page_title="AI Doji Terminali v6.9.5", layout="wide", initial_sidebar_state="auto")
+st.set_page_config(page_title="AI Doji Terminali v6.9.6", layout="wide", initial_sidebar_state="auto")
 
 # --- HIZLANDIRICI: CACHE (ÖNBELLEK) FONKSİYONU ---
 @st.cache_data(ttl=300) 
@@ -34,10 +34,10 @@ def canli_spot_cek(symbol):
         pass
     return None
 
-# --- GLOBAL PİYASA TANIMLARI ---
+# --- GLOBAL PİYASA TANIMLARI (Altın ve Gümüş Spot Sembollerine Sabitlendi) ---
 MARKETS = [
-    {"name": "Altın (XAU/USD)", "symbol": "GC=F", "tv": "OANDA:XAUUSD", "category": "Emtia", "color": "#F59E0B"},
-    {"name": "Gümüş (XAG/USD)", "symbol": "SI=F", "tv": "OANDA:XAGUSD", "category": "Emtia", "color": "#94A3B8"},
+    {"name": "Altın (XAU/USD)", "symbol": "XAUUSD=X", "tv": "OANDA:XAUUSD", "category": "Emtia", "color": "#F59E0B"},
+    {"name": "Gümüş (XAG/USD)", "symbol": "XAGUSD=X", "tv": "OANDA:XAGUSD", "category": "Emtia", "color": "#94A3B8"},
     {"name": "EUR/USD", "symbol": "EURUSD=X", "tv": "OANDA:EURUSD", "category": "Forex", "color": "#3B82F6"},
     {"name": "GBP/USD", "symbol": "GBPUSD=X", "tv": "OANDA:GBPUSD", "category": "Forex", "color": "#8B5CF6"},
     {"name": "USD/JPY", "symbol": "JPY=X", "tv": "OANDA:USDJPY", "category": "Forex", "color": "#10B981"},
@@ -395,13 +395,11 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
         _lookback = {"1h": 24, "4h": 30, "1d": 5}.get(interval, 12)
         _lookback = max(1, min(_lookback, len(df) - 1))
         
-        # --- CANLI FİYAT ÇEKİMİ (REBOUND/DRAWDOWN HESABINDAN ÖNCEYE ALINDI) ---
+        # --- ANLIK CANLI FİYAT YAMASI VE EŞZAMANLI HESAPLAMA ---
         gosterim_fiyati = gercek_canli_fiyat
-        if market["category"] == "Emtia":
-            spot_sym = "XAUUSD=X" if "Altın" in market["name"] else ("XAGUSD=X" if "Gümüş" in market["name"] else market["symbol"])
-            canli_fiyat = canli_spot_cek(spot_sym)
-            if canli_fiyat:
-                gosterim_fiyati = canli_fiyat
+        canli_fiyat = canli_spot_cek(market["symbol"])
+        if canli_fiyat:
+            gosterim_fiyati = canli_fiyat
                 
         rebound_pct = 0.0
         drawdown_pct = 0.0
@@ -420,10 +418,10 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
                 
                 if doji_close > 0:
                     if signal == "SELL":
-                        # Anlık spot fiyatı geçmişteki tepe ile kıyaslanıp entegre edildi
-                        peak_after = max(float(gelecek_mumlar_high.max()), gosterim_fiyati)
-                        rebound_pct = round(((peak_after - doji_close) / doji_close) * 100, 2)
+                        # Gelecekteki zirve kârını değil, ANLIK OLAN güncel fırsatı hesaplıyor
+                        rebound_pct = round(((gosterim_fiyati - doji_close) / doji_close) * 100, 2)
                         
+                        # Yapısal kontrol geçmiş ihlallere (iğnelere) ve canlı fiyata birlikte bakmalı
                         en_dusuk_alinmadi = min(float(gelecek_mumlar_low.min()), gosterim_fiyati) >= doji_low
                         altinda_kapanis_yok = min(float(gelecek_mumlar_close.min()), gosterim_fiyati) >= doji_close
                         
@@ -431,9 +429,8 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
                             yapisal_short_guclu = True
                             
                     elif signal == "BUY":
-                        # Anlık spot fiyatı geçmişteki dip ile kıyaslanıp entegre edildi
-                        dip_after = min(float(gelecek_mumlar_low.min()), gosterim_fiyati)
-                        drawdown_pct = round(((doji_close - dip_after) / doji_close) * 100, 2)
+                        # Gelecekteki en dip kârını değil, ANLIK OLAN güncel fırsatı hesaplıyor
+                        drawdown_pct = round(((doji_close - gosterim_fiyati) / doji_close) * 100, 2)
                         
                         en_yuksek_alinmadi = max(float(gelecek_mumlar_high.max()), gosterim_fiyati) <= doji_high
                         ustunde_kapanis_yok = max(float(gelecek_mumlar_close.max()), gosterim_fiyati) <= doji_close
@@ -454,13 +451,11 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
         if is_confluence: skor += 2
         if (signal == "BUY" and rsi_val < 35) or (signal == "SELL" and rsi_val > 65): skor += 2
         if (signal == "BUY" and price_to_bb < 0.2) or (signal == "SELL" and price_to_bb > 0.8): skor += 1
-        
         if (signal == "BUY" and macd_hist < 0) or (signal == "SELL" and macd_hist > 0): skor += 1
         if signal == "SELL" and yapisal_short_guclu: skor += 2
         elif signal == "BUY" and yapisal_long_guclu: skor += 2
         
         skor = min(skor, 10)
-                
         degisim_yuzdesi = float(((gosterim_fiyati - df['Open'].iloc[-_lookback]) / (df['Open'].iloc[-_lookback] + 1e-10)) * 100)
 
         return {
@@ -499,7 +494,7 @@ st.markdown("""
 # --- SOL MENÜ NAVİGASYONU (SIDEBAR) ---
 st.sidebar.markdown("""
 <div style='text-align: center; padding: 10px; border-bottom: 1px solid #1E293B; margin-bottom: 20px;'>
-    <h3 style='color: #FFF; margin: 0; font-size: 16px;'>🌐 AI TERMINAL v6.9.5</h3>
+    <h3 style='color: #FFF; margin: 0; font-size: 16px;'>🌐 AI TERMINAL v6.9.6</h3>
 </div>
 """, unsafe_allow_html=True)
 
@@ -543,7 +538,7 @@ if st.session_state.hatalar:
 
 st.markdown(f"""
 <div style="background: linear-gradient(180deg, #0F172A 0%, #020817 100%); border-bottom: 1px solid #1E293B; padding: 15px; margin-bottom: 15px; border-radius: 8px;">
-    <h1 style="margin: 0; font-size: 22px; font-weight: 800; color: #FFF;">🤖 Joe Barbarov AI Terminal v6.9.5</h1>
+    <h1 style="margin: 0; font-size: 22px; font-weight: 800; color: #FFF;">🤖 Joe Barbarov AI Terminal v6.9.6</h1>
     <p style="margin: 0; font-size: 12px; color: #64748B;">Oda: <b>{secilen_sayfa}</b> • Gerçek Zamanlı Veri İşleme & PA Fırsat Sıralaması</p>
 </div>
 """, unsafe_allow_html=True)
@@ -555,7 +550,7 @@ if secilen_sayfa == "🏠 Genel Dashboard":
     with st.spinner("Tüm piyasa dinamikleri sorgulanıyor..."):
         c_val, c_status, c_color = get_crypto_fng()
         n_vol, n_vol_clr, n_hac = get_real_market_dynamics(["AAPL", "TSLA", "NVDA", "MSFT"])
-        e_vol, e_vol_clr, e_hac = get_real_market_dynamics(["GC=F", "SI=F"])
+        e_vol, e_vol_clr, e_hac = get_real_market_dynamics(["XAUUSD=X", "XAGUSD=X"])
         c_vol = "Yüksek 🔥" if c_val > 65 else ("Düşük 💤" if c_val < 35 else "Normal 📊")
         c_vol_clr = "#34D399" if c_val > 65 else ("#64748B" if c_val < 35 else "#F59E0B")
         c_hac = "Güçlü 💰" if c_val > 55 else "Zayıf 📉"
@@ -663,7 +658,7 @@ elif secilen_sayfa == "🇺🇸 NASDAQ Terminali":
 
 elif secilen_sayfa == "👑 Emtia Terminali":
     with st.spinner("Emtia verileri analiz ediliyor..."):
-        e_vol, e_vol_clr, e_hac = get_real_market_dynamics(["GC=F", "SI=F"])
+        e_vol, e_vol_clr, e_hac = get_real_market_dynamics(["XAUUSD=X", "XAGUSD=X"])
         e_bar_color = "#EF4444" if "Kapalı" in e_hac else ("#10B981" if "Güçlü" in e_hac else "#94A3B8")
         p_durum = dinamik_piyasa_durumu("Emtia")
         
@@ -773,30 +768,32 @@ else:
                 
                 if not is_buy:
                     rb = r.get("reboundPct", 0.0)
-                    if rb >= 2.0: st.error(f"🚨 Aşırı Tepe Fırsatı (+%{rb:.2f}) - Güçlü Satış Fırsatı")
-                    elif rb >= 1.0: st.error(f"🔥 Güçlü Tepe Fırsatı (+%{rb:.2f})")
-                    elif rb >= 0.4: st.warning(f"⚠️ Orta Tepe Fırsatı (+%{rb:.2f})")
-                    elif rb > 0: st.info(f"💤 Zayıf Tepe Fırsatı (+%{rb:.2f})")
+                    if rb >= 2.0: st.error(f"🚨 Mükemmel Şort Girişi (+%{rb:.2f})")
+                    elif rb >= 1.0: st.error(f"🔥 Güçlü Şort Girişi (+%{rb:.2f})")
+                    elif rb >= 0.4: st.warning(f"⚠️ İdeal Şort Girişi (+%{rb:.2f})")
+                    elif rb > 0: st.info(f"💤 Zayıf Giriş (+%{rb:.2f})")
+                    else: st.markdown(f"<span style='color: #64748B;'>⏳ Geç Kalındı: Fiyat Zaten Düştü ({rb:.2f}%)</span>", unsafe_allow_html=True)
                     
-                    if r.get("yapisalShortGuclu", False):
+                    if r.get("yapisalShortGuclu", False) and rb > 0:
                         st.markdown("""
                         <div style='background-color: rgba(239, 68, 68, 0.15); padding: 10px; border-radius: 6px; border-left: 4px solid #EF4444; margin-top: 8px; margin-bottom: 5px;'>
                             <span style='color: #F87171; font-weight: 700; font-size: 13px;'>🎯 YAPISAL BLOK AKTİF (SHORT GÜÇLÜ)</span><br>
-                            <span style='color: #CBD5E1; font-size: 11px;'>Sinyal mumunun en düşüğü kırılmadı veya altında gövde kapanışı gelmedi. Fiyat yukarı esnedikçe SHORT yönlü baskı ve R/R oranı maksimize oluyor! (+2 Ek Skor uygulandı)</span>
+                            <span style='color: #CBD5E1; font-size: 11px;'>Sinyal mumundan bu yana en düşük kırılmadı. Fiyat şu an yukarıda, SHORT yönlü baskı ve R/R oranı maksimize durumda!</span>
                         </div>
                         """, unsafe_allow_html=True)
                 else:
                     dd = r.get("drawdownPct", 0.0)
-                    if dd >= 2.0: st.success(f"🚨 Aşırı Dip Fırsatı (-%{dd:.2f}) - Güçlü Alış Fırsatı")
-                    elif dd >= 1.0: st.success(f"🔥 Güçlü Dip Fırsatı (-%{dd:.2f})")
-                    elif dd >= 0.4: st.info(f"⚠️ Orta Dip Fırsatı (-%{dd:.2f})")
-                    elif dd > 0: st.write(f"💤 Zayıf Dip Fırsatı (-%{dd:.2f})")
+                    if dd >= 2.0: st.success(f"🚨 Mükemmel Long Girişi (-%{dd:.2f})")
+                    elif dd >= 1.0: st.success(f"🔥 Güçlü Long Girişi (-%{dd:.2f})")
+                    elif dd >= 0.4: st.info(f"⚠️ İdeal Long Girişi (-%{dd:.2f})")
+                    elif dd > 0: st.write(f"💤 Zayıf Giriş (-%{dd:.2f})")
+                    else: st.markdown(f"<span style='color: #64748B;'>⏳ Geç Kalındı: Fiyat Zaten Fırladı ({dd:.2f}%)</span>", unsafe_allow_html=True)
                     
-                    if r.get("yapisalLongGuclu", False):
+                    if r.get("yapisalLongGuclu", False) and dd > 0:
                         st.markdown("""
                         <div style='background-color: rgba(16, 185, 129, 0.15); padding: 10px; border-radius: 6px; border-left: 4px solid #10B981; margin-top: 8px; margin-bottom: 5px;'>
                             <span style='color: #34D399; font-weight: 700; font-size: 13px;'>🎯 YAPISAL LONG GÜÇLENMESİ AKTİF</span><br>
-                            <span style='color: #CBD5E1; font-size: 11px;'>Sinyal mumunun tepesi yukarı kırılmadı veya üstünde kapanış gelmedi. Fiyat aşağı esnedikçe LONG yönlü maliyetlenme avantajı artıyor! (+2 Ek Skor uygulandı)</span>
+                            <span style='color: #CBD5E1; font-size: 11px;'>Sinyal mumundan bu yana en yüksek kırılmadı. Fiyat şu an aşağıda, LONG yönlü maliyetlenme avantajı maksimumda!</span>
                         </div>
                         """, unsafe_allow_html=True)
                 
