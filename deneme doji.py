@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AI Doji Terminali - v6.9 (Kritik Mantık Hataları, Canlı Veri ve Model İyileştirmeleri Yapıldı)
+AI Doji Terminali - v6.9.1 (Tüm Kritik & Sessiz Bug'lar Giderildi)
 """
 
 import streamlit as st
@@ -15,17 +15,16 @@ import traceback
 from sklearn.model_selection import TimeSeriesSplit
 
 # --- SAYFA AYARLARI ---
-st.set_page_config(page_title="AI Doji Terminali v6.9", layout="wide", initial_sidebar_state="auto")
+st.set_page_config(page_title="AI Doji Terminali v6.9.1", layout="wide", initial_sidebar_state="auto")
 
 # --- HIZLANDIRICI: CACHE (ÖNBELLEK) FONKSİYONU ---
 @st.cache_data(ttl=300) 
 def veri_indir(symbol, periyot, interval):
     return yf.download(symbol, period=periyot, interval=interval, progress=False)
 
-# --- DÜZELTME: CANLI SPOT İÇİN CACHE'SİZ FONKSİYON ---
+# --- CANLI SPOT İÇİN CACHE'SİZ FONKSİYON ---
 def canli_spot_cek(symbol):
     try:
-        # Cache kullanmadan anlık 1 dakikalık son veriyi çeker
         spot_df = yf.download(symbol, period="1d", interval="1m", progress=False)
         if spot_df is not None and not spot_df.empty:
             if isinstance(spot_df.columns, pd.MultiIndex):
@@ -123,7 +122,8 @@ def get_real_market_dynamics(symbols):
             if avg_vol_ratio > 2.0: final_vol, final_vol_clr = "Yüksek 🔥", "#34D399"
             elif avg_vol_ratio > 1.0: final_vol, final_vol_clr = "Normal 📊", "#F59E0B"
             
-        if vol_counts > 0 and sum(vol_results) > 0:
+        # BUG FİX: Negatif hacim şoku toplamında hata vermemesi için "len(vol_results) > 0" kullanıldı
+        if vol_counts > 0 and len(vol_results) > 0:
             avg_hacim_soku = sum(vol_results) / vol_counts
             if avg_hacim_soku > 1.15: final_hac = "Güçlü 💰"
             elif avg_hacim_soku > 0.85: final_hac = "Normal 📈"
@@ -138,7 +138,7 @@ def dinamik_piyasa_durumu(kategori="Genel"):
     
     now_utc = datetime.now(timezone.utc)
     gun = now_utc.weekday() 
-    saat = now_utc.hour # UTC Saati
+    saat = now_utc.hour 
     tarih_str = now_utc.strftime("%Y-%m-%d")
     
     NYSE_TATILLER_2026 = ["2026-01-01", "2026-01-19", "2026-02-16", "2026-04-03", "2026-05-25", "2026-06-19", "2026-07-03", "2026-09-07", "2026-11-26", "2026-12-25"]
@@ -146,16 +146,16 @@ def dinamik_piyasa_durumu(kategori="Genel"):
     if tarih_str in NYSE_TATILLER_2026 and kategori in ["NASDAQ", "Genel"]: 
         return "Tatil 💤"
     
-    # DÜZELTME: BIST Saatleri (UTC 07:00 - 15:10 arası açık, TSİ 10:00-18:10)
     if kategori == "BIST":
         if gun >= 5: return "Kapalı 💤"
         if 7 <= saat < 15 or (saat == 15 and now_utc.minute <= 10): return "Açık 🟢"
         return "Kapalı 💤"
         
+    # BUG FİX: Emtia kategorisi dahil edildi ve Forex Cuma 21:00 UTC kapanışı düzeltildi.
     if kategori in ["Forex", "Emtia"]:
         if gun == 5: return "Kapalı 💤"
         if gun == 6 and saat < 22: return "Kapalı 💤"
-        if gun == 4 and saat >= 22: return "Kapalı 💤"
+        if gun == 4 and saat >= 21: return "Kapalı 💤"
         return "Açık 🟢"
         
     if gun >= 5: return "Kapalı 💤"
@@ -190,7 +190,6 @@ def piyasa_rejimi_hesapla(symbol):
 
 def buyuk_trend_kontrol(symbol):
     try:
-        # DÜZELTME: BIST/NASDAQ gibi borsalarda 4 saatlikte 200 mum oluşması için periyot 1 yıla çıkarıldı.
         df_big = veri_indir(symbol, "1y", "4h")
         if df_big.empty: return "Yansız"
         if isinstance(df_big.columns, pd.MultiIndex):
@@ -275,18 +274,17 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
         tam_veri_uzunlugu = len(df)
         df['Gercek_Sira'] = range(tam_veri_uzunlugu)
         
-        # --- DÜZELTME: DİNAMİK HEDEF HESAPLAMA (ATR ve Kategoriye Göre) ---
         suanki_fiyat = df['Close']
         ilerideki_kapanis = df['Close'].shift(-int(min_hours))
         indexer = pd.api.indexers.FixedForwardWindowIndexer(window_size=int(min_hours))
         
-        ilerideki_min = df['Low'].shift(-1).rolling(window=indexer).min()
-        ilerideki_max = df['High'].shift(-1).rolling(window=indexer).max()
+        # BUG FİX: shift(-1) kaldırılarak çift kaydırma ve etiket kayması önlendi
+        ilerideki_min = df['Low'].rolling(window=indexer).min()
+        ilerideki_max = df['High'].rolling(window=indexer).max()
         
-        # Kategoriye göre kâr/zarar marjı
-        if market["category"] == "Forex": marj = 0.002    # %0.2
-        elif market["category"] == "Kripto": marj = 0.012 # %1.2
-        else: marj = 0.006                                # %0.6
+        if market["category"] == "Forex": marj = 0.002    
+        elif market["category"] == "Kripto": marj = 0.012 
+        else: marj = 0.006                                
         
         buy_target = np.where((ilerideki_kapanis > suanki_fiyat * (1 + marj)) & (ilerideki_min >= suanki_fiyat * (1 - marj)), 1, 0)
         sell_target = np.where((ilerideki_kapanis < suanki_fiyat * (1 - marj)) & (ilerideki_max <= suanki_fiyat * (1 + marj)), 1, 0)
@@ -370,7 +368,6 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
             son_veri = df[features].iloc[[-1]]
             tahmin_yon = model.predict(son_veri)[0]
             
-            # DÜZELTME: Olasılık çökmesine karşı Try-Except
             try:
                 guven_orani = int(max(model.predict_proba(son_veri)[0]) * 100)
             except:
@@ -452,16 +449,17 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
         if (signal == "BUY" and rsi_val < 35) or (signal == "SELL" and rsi_val > 65): skor += 2
         if (signal == "BUY" and price_to_bb < 0.2) or (signal == "SELL" and price_to_bb > 0.8): skor += 1
         if (signal == "BUY" and macd_hist > 0) or (signal == "SELL" and macd_hist < 0): skor += 1
+        if signal == "SELL" and yapisal_short_guclu: skor += 2
+        elif signal == "BUY" and yapisal_long_guclu: skor += 2
         
-        if signal == "SELL" and yapisal_short_guclu:
-            skor += 2
-        elif signal == "BUY" and yapisal_long_guclu:
-            skor += 2
+        # BUG FİX: Skorların maksimum 10'da sabitlenmesi
+        skor = min(skor, 10)
             
-        # --- DÜZELTME: SPOT FİYAT YAMASI (Cache'den bağımsız gerçek zamanlı) ---
         gosterim_fiyati = gercek_canli_fiyat
-        if market["category"] == "Emtia":
-            spot_sym = "XAUUSD=X" if "Altın" in market["name"] else "XAGUSD=X"
+        
+        # BUG FİX: Sadece Emtia değil Kripto için de canli fiyat yaması
+        if market["category"] in ["Emtia", "Kripto"]:
+            spot_sym = "XAUUSD=X" if "Altın" in market["name"] else ("XAGUSD=X" if "Gümüş" in market["name"] else market["symbol"])
             canli_fiyat = canli_spot_cek(spot_sym)
             if canli_fiyat:
                 gosterim_fiyati = canli_fiyat
@@ -491,8 +489,6 @@ if "strict_mode" not in st.session_state: st.session_state.strict_mode = False
 if "hatalar" not in st.session_state: st.session_state.hatalar = []
 if "ozel_semboller" not in st.session_state: st.session_state.ozel_semboller = []
 
-TUM_MARKETLER = MARKETS + st.session_state.ozel_semboller
-
 # Stil Tanımlamaları
 st.markdown("""
 <style>
@@ -506,7 +502,7 @@ st.markdown("""
 # --- SOL MENÜ NAVİGASYONU (SIDEBAR) ---
 st.sidebar.markdown("""
 <div style='text-align: center; padding: 10px; border-bottom: 1px solid #1E293B; margin-bottom: 20px;'>
-    <h3 style='color: #FFF; margin: 0; font-size: 16px;'>🌐 AI TERMINAL v6.9</h3>
+    <h3 style='color: #FFF; margin: 0; font-size: 16px;'>🌐 AI TERMINAL v6.9.1</h3>
 </div>
 """, unsafe_allow_html=True)
 
@@ -532,6 +528,9 @@ if st.sidebar.button("Listeye Ekle") and ozel_sembol:
     st.sidebar.success(f"{ozel_sembol} eklendi!")
     st.rerun()
 
+# BUG FİX: Özel semboller eklendikten sonra dinamik olarak listeyi güncelle
+TUM_MARKETLER = MARKETS + st.session_state.ozel_semboller
+
 st.sidebar.markdown("---")
 st.sidebar.subheader("🛠️ Sistem Test & Görünüm")
 st.session_state.force_past = st.sidebar.checkbox("🔓 Zaman Filtresini Kaldır (Eski Dojileri Bul)", value=st.session_state.force_past)
@@ -542,18 +541,20 @@ if st.session_state.hatalar:
     with st.sidebar.expander("🐛 Hata Logu", expanded=False):
         for hata in st.session_state.hatalar[-10:]:
             st.code(hata, language="text")
-        if st.button("Logları Temizle"):
+        # BUG FİX: Buton Sidebar içine alındı
+        if st.sidebar.button("Logları Temizle"):
             st.session_state.hatalar = []
             st.rerun()
 
 st.markdown(f"""
 <div style="background: linear-gradient(180deg, #0F172A 0%, #020817 100%); border-bottom: 1px solid #1E293B; padding: 15px; margin-bottom: 15px; border-radius: 8px;">
-    <h1 style="margin: 0; font-size: 22px; font-weight: 800; color: #FFF;">🤖 Joe Barbarov AI Terminal v6.9</h1>
+    <h1 style="margin: 0; font-size: 22px; font-weight: 800; color: #FFF;">🤖 Joe Barbarov AI Terminal v6.9.1</h1>
     <p style="margin: 0; font-size: 12px; color: #64748B;">Oda: <b>{secilen_sayfa}</b> • Gerçek Zamanlı Veri İşleme & PA Fırsat Sıralaması</p>
 </div>
 """, unsafe_allow_html=True)
 
 # --- PANEL İÇERİĞİ VE GÖRSEL KARTLAR ---
+# BUG FİX: aktif_list olası çökmelere karşı her koşulda tanımlanıyor
 aktif_list = []
 
 if secilen_sayfa == "🏠 Genel Dashboard":
@@ -689,6 +690,9 @@ elif secilen_sayfa == "🇹🇷 BIST Terminali":
 elif secilen_sayfa == "✨ Özel İzleme Listesi":
     aktif_list = st.session_state.ozel_semboller
 
+else:
+    aktif_list = []
+
 # --- TRADINGVIEW MODAL MOTORU ---
 if st.session_state.chart_open:
     c_market = st.session_state.chart_open
@@ -776,13 +780,13 @@ else:
                 st.write(f"⏳ **Doji Yaşı:** {r['hoursAgo']} Mum Önce ({r['dojiType']} Doji)")
                 st.caption(f"**Büyük Trend (4h):** {r['bigTrend']} | {'🔥 Uyumlu' if is_confluence else '⚠️ Trend Tersi Riskli'}")
                 
-                # --- DRAWDOWN / REBOUND TUZAK BİLGİLERİ VE PA ALERTLERİ ---
+                # BUG FİX: Renk uyumsuzlukları giderildi (st.error/st.success/st.warning/st.info mantığı)
                 if not is_buy:
                     rb = r.get("reboundPct", 0.0)
                     if rb >= 2.0: st.error(f"🚨 Aşırı Tepe Fırsatı (+%{rb:.2f}) - Güçlü Satış Fırsatı")
-                    elif rb >= 1.0: st.warning(f"🔥 Güçlü Tepe Fırsatı (+%{rb:.2f})")
-                    elif rb >= 0.4: st.info(f"⚠️ Orta Tepe Fırsatı (+%{rb:.2f})")
-                    elif rb > 0: st.success(f"💤 Zayıf Tepe Fırsatı (+%{rb:.2f})")
+                    elif rb >= 1.0: st.error(f"🔥 Güçlü Tepe Fırsatı (+%{rb:.2f})")
+                    elif rb >= 0.4: st.warning(f"⚠️ Orta Tepe Fırsatı (+%{rb:.2f})")
+                    elif rb > 0: st.info(f"💤 Zayıf Tepe Fırsatı (+%{rb:.2f})")
                     
                     if r.get("yapisalShortGuclu", False):
                         st.markdown("""
@@ -794,9 +798,9 @@ else:
                 else:
                     dd = r.get("drawdownPct", 0.0)
                     if dd >= 2.0: st.success(f"🚨 Aşırı Dip Fırsatı (-%{dd:.2f}) - Güçlü Alış Fırsatı")
-                    elif dd >= 1.0: st.info(f"🔥 Güçlü Dip Fırsatı (-%{dd:.2f})")
-                    elif dd >= 0.4: st.warning(f"⚠️ Orta Dip Fırsatı (-%{dd:.2f})")
-                    elif dd > 0: st.error(f"💤 Zayıf Dip Fırsatı (-%{dd:.2f})")
+                    elif dd >= 1.0: st.success(f"🔥 Güçlü Dip Fırsatı (-%{dd:.2f})")
+                    elif dd >= 0.4: st.info(f"⚠️ Orta Dip Fırsatı (-%{dd:.2f})")
+                    elif dd > 0: st.write(f"💤 Zayıf Dip Fırsatı (-%{dd:.2f})")
                     
                     if r.get("yapisalLongGuclu", False):
                         st.markdown("""
