@@ -370,6 +370,12 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
             son_veri = df[features].iloc[[-1]]
             tahmin_yon = model.predict(son_veri)[0]
             guven_orani = int(max(model.predict_proba(son_veri)[0]) * 100)
+            
+            # --- EKLEMEN GEREKEN GÜVEN EŞİĞİ KONTROLÜ ---
+            if guven_orani < 75:
+                return None 
+            # ---------------------------------------------
+            
             toplam_sinyal = len(y)
             
             if hasattr(model, 'feature_importances_'):
