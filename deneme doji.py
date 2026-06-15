@@ -24,8 +24,8 @@ def veri_indir(symbol, periyot, interval):
 
 # --- GLOBAL PİYASA TANIMLARI ---
 MARKETS = [
-    {"name": "Altın (XAU/USD)", "symbol": "XAUUSD=X", "tv": "OANDA:XAUUSD", "category": "Emtia", "color": "#F59E0B"},
-    {"name": "Gümüş (XAG/USD)", "symbol": "XAGUSD=X", "tv": "OANDA:XAGUSD", "category": "Emtia", "color": "#94A3B8"},
+    {"name": "Altın (XAU/USD)", "symbol": "GC=F", "tv": "OANDA:XAUUSD", "category": "Emtia", "color": "#F59E0B"},
+    {"name": "Gümüş (XAG/USD)", "symbol": "SI=F", "tv": "OANDA:XAGUSD", "category": "Emtia", "color": "#94A3B8"},
     {"name": "EUR/USD", "symbol": "EURUSD=X", "tv": "OANDA:EURUSD", "category": "Forex", "color": "#3B82F6"},
     {"name": "GBP/USD", "symbol": "GBPUSD=X", "tv": "OANDA:GBPUSD", "category": "Forex", "color": "#8B5CF6"},
     {"name": "USD/JPY", "symbol": "JPY=X", "tv": "OANDA:USDJPY", "category": "Forex", "color": "#10B981"},
@@ -501,7 +501,7 @@ if secilen_sayfa == "🏠 Genel Dashboard":
     with st.spinner("Tüm piyasa dinamikleri sorgulanıyor..."):
         c_val, c_status, c_color = get_crypto_fng()
         n_vol, n_vol_clr, n_hac = get_real_market_dynamics(["AAPL", "TSLA", "NVDA", "MSFT"])
-        e_vol, e_vol_clr, e_hac = get_real_market_dynamics(["XAUUSD=X", "XAGUSD=X"])
+        e_vol, e_vol_clr, e_hac = get_real_market_dynamics(["GC=F", "SI=F"])
         c_vol = "Yüksek 🔥" if c_val > 65 else ("Düşük 💤" if c_val < 35 else "Normal 📊")
         c_vol_clr = "#34D399" if c_val > 65 else ("#64748B" if c_val < 35 else "#F59E0B")
         c_hac = "Güçlü 💰" if c_val > 55 else "Zayıf 📉"
