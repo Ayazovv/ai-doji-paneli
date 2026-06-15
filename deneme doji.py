@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AI Doji Terminali - v6.9 (Kritik Veri Kesilme Hatası Çözüldü, Canlı Spot Senkronizasyonu)
+AI Doji Terminali - v6.9 (Kritik Mantık Hataları, Canlı Veri ve Model İyileştirmeleri Yapıldı)
 """
 
 import streamlit as st
@@ -21,6 +21,19 @@ st.set_page_config(page_title="AI Doji Terminali v6.9", layout="wide", initial_s
 @st.cache_data(ttl=300) 
 def veri_indir(symbol, periyot, interval):
     return yf.download(symbol, period=periyot, interval=interval, progress=False)
+
+# --- DÜZELTME: CANLI SPOT İÇİN CACHE'SİZ FONKSİYON ---
+def canli_spot_cek(symbol):
+    try:
+        # Cache kullanmadan anlık 1 dakikalık son veriyi çeker
+        spot_df = yf.download(symbol, period="1d", interval="1m", progress=False)
+        if spot_df is not None and not spot_df.empty:
+            if isinstance(spot_df.columns, pd.MultiIndex):
+                spot_df.columns = spot_df.columns.get_level_values(0)
+            return float(spot_df['Close'].iloc[-1])
+    except:
+        pass
+    return None
 
 # --- GLOBAL PİYASA TANIMLARI ---
 MARKETS = [
@@ -125,13 +138,19 @@ def dinamik_piyasa_durumu(kategori="Genel"):
     
     now_utc = datetime.now(timezone.utc)
     gun = now_utc.weekday() 
-    saat = now_utc.hour
+    saat = now_utc.hour # UTC Saati
     tarih_str = now_utc.strftime("%Y-%m-%d")
     
     NYSE_TATILLER_2026 = ["2026-01-01", "2026-01-19", "2026-02-16", "2026-04-03", "2026-05-25", "2026-06-19", "2026-07-03", "2026-09-07", "2026-11-26", "2026-12-25"]
     
     if tarih_str in NYSE_TATILLER_2026 and kategori in ["NASDAQ", "Genel"]: 
         return "Tatil 💤"
+    
+    # DÜZELTME: BIST Saatleri (UTC 07:00 - 15:10 arası açık, TSİ 10:00-18:10)
+    if kategori == "BIST":
+        if gun >= 5: return "Kapalı 💤"
+        if 7 <= saat < 15 or (saat == 15 and now_utc.minute <= 10): return "Açık 🟢"
+        return "Kapalı 💤"
         
     if kategori in ["Forex", "Emtia"]:
         if gun == 5: return "Kapalı 💤"
@@ -139,7 +158,7 @@ def dinamik_piyasa_durumu(kategori="Genel"):
         if gun == 4 and saat >= 22: return "Kapalı 💤"
         return "Açık 🟢"
         
-    if gun == 5 or gun == 6: return "Kapalı 💤"
+    if gun >= 5: return "Kapalı 💤"
     if gun == 4 and saat >= 21: return "Kapalı 💤"
     return "Açık 🟢"
 
@@ -171,7 +190,8 @@ def piyasa_rejimi_hesapla(symbol):
 
 def buyuk_trend_kontrol(symbol):
     try:
-        df_big = veri_indir(symbol, "60d", "4h")
+        # DÜZELTME: BIST/NASDAQ gibi borsalarda 4 saatlikte 200 mum oluşması için periyot 1 yıla çıkarıldı.
+        df_big = veri_indir(symbol, "1y", "4h")
         if df_big.empty: return "Yansız"
         if isinstance(df_big.columns, pd.MultiIndex):
             df_big.columns = df_big.columns.get_level_values(0)
@@ -249,31 +269,30 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
         df['Price_to_BB'] = (df['Close'] - df['Lower_BB']) / (df['Upper_BB'] - df['Lower_BB'] + 1e-10)
         df['Trend_Slope'] = df['EMA20'].diff(3) / (df['EMA20'] + 1e-10) * 100
 
-        # Eksik verileri temizle
         df = df.dropna()
         
-        # --- CANLI VERİYİ KORUMA ALTINA AL ---
         gercek_canli_fiyat = float(df['Close'].iloc[-1])
         tam_veri_uzunlugu = len(df)
         df['Gercek_Sira'] = range(tam_veri_uzunlugu)
         
-        # --- HEDEF (TARGET) HESAPLAMA (GÜNCELLENDİ) ---
+        # --- DÜZELTME: DİNAMİK HEDEF HESAPLAMA (ATR ve Kategoriye Göre) ---
         suanki_fiyat = df['Close']
         ilerideki_kapanis = df['Close'].shift(-int(min_hours))
         indexer = pd.api.indexers.FixedForwardWindowIndexer(window_size=int(min_hours))
         
         ilerideki_min = df['Low'].shift(-1).rolling(window=indexer).min()
-        ilerideki_max = df['High'].shift(-1).rolling(window=indexer).max() # SHORT STOPU İÇİN EKLENDİ!
+        ilerideki_max = df['High'].shift(-1).rolling(window=indexer).max()
         
-        # BUY (Long): Vade içinde %1 kar al VE %1 stop'a çarpma
-        buy_target = np.where((ilerideki_kapanis > suanki_fiyat * 1.01) & (ilerideki_min >= suanki_fiyat * 0.99), 1, 0)
+        # Kategoriye göre kâr/zarar marjı
+        if market["category"] == "Forex": marj = 0.002    # %0.2
+        elif market["category"] == "Kripto": marj = 0.012 # %1.2
+        else: marj = 0.006                                # %0.6
         
-        # SELL (Short): Vade içinde %1 kar al VE %1 stop'a (yukarı iğne) çarpma!
-        sell_target = np.where((ilerideki_kapanis < suanki_fiyat * 0.99) & (ilerideki_max <= suanki_fiyat * 1.01), 1, 0)
+        buy_target = np.where((ilerideki_kapanis > suanki_fiyat * (1 + marj)) & (ilerideki_min >= suanki_fiyat * (1 - marj)), 1, 0)
+        sell_target = np.where((ilerideki_kapanis < suanki_fiyat * (1 - marj)) & (ilerideki_max <= suanki_fiyat * (1 + marj)), 1, 0)
         
         df['Hedef'] = np.where(buy_target == 1, 1, np.where(sell_target == 1, 0, -1))
         
-        # --- SADECE EĞİTİM İÇİN VERİYİ KES (ANA DF BOZULMAZ!) ---
         train_df = df[df['Hedef'] != -1].copy() 
         
         features = [
@@ -289,7 +308,6 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
             'Trend_Slope': 'Trend Eğimi'
         }
         
-        # --- ZAMAN FİLTRESİ (Kesilmemiş Tam Canlı Veriden) ---
         son_50_mum = df.tail(50)
         doji_olanlar = son_50_mum[son_50_mum['Doji'] == True]
         
@@ -312,19 +330,16 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
             
         gecen_mum = min(olgun_dojiler)
             
-        # --- YAPAY ZEKA EĞİTİM VERİSİ VE ÇÖKME KORUMASI ---
         doji_train_df = train_df[train_df['Doji'] == True]
         
-        # EĞER Doji listesi doluysa ve içinde hem 0 hem 1 sonuçları varsa sadece Doji'lere odaklan
         if len(doji_train_df) >= 20 and len(doji_train_df['Hedef'].unique()) > 1: 
             X = doji_train_df[features]
             y = doji_train_df['Hedef']
-        # EĞER Doji'lerin hepsi aynı sonuçlanmışsa XGBoost çökmesin diye tüm veriye (train_df) bak
         elif len(train_df['Hedef'].unique()) > 1:
             X = train_df[features]
             y = train_df['Hedef']
         else:
-            return None # Tüm geçmiş veri dümdüzse işlem yapma pas geç
+            return None 
             
         win_rate, toplam_sinyal = 50, 0
         en_etkili_faktorler = {}
@@ -352,10 +367,15 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
             
             model.fit(X, y)
             
-            # TAHMİNİ CANLI VERİ İLE YAP
             son_veri = df[features].iloc[[-1]]
             tahmin_yon = model.predict(son_veri)[0]
-            guven_orani = int(max(model.predict_proba(son_veri)[0]) * 100)
+            
+            # DÜZELTME: Olasılık çökmesine karşı Try-Except
+            try:
+                guven_orani = int(max(model.predict_proba(son_veri)[0]) * 100)
+            except:
+                guven_orani = 55
+                
             toplam_sinyal = len(y)
             
             if hasattr(model, 'feature_importances_'):
@@ -382,7 +402,6 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
         _lookback = {"1h": 24, "4h": 30, "1d": 5}.get(interval, 12)
         _lookback = min(_lookback, len(df) - 1)
         
-        # --- TEPE VE DİP FIRSATI HESAPLAMA ---
         rebound_pct = 0.0
         drawdown_pct = 0.0
         yapisal_short_guclu = False 
@@ -419,7 +438,6 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
                         if (en_yuksek_alinmadi or ustunde_kapanis_yok) and (gercek_canli_fiyat < doji_close):
                             yapisal_long_guclu = True
 
-        # --- SKORLAMA MOTORU (Canlı İndikatörlerle) ---
         big_trend = buyuk_trend_kontrol(market["symbol"])
         is_confluence = (signal == "BUY" and big_trend == "Boğa (Yukarı)") or (signal == "SELL" and big_trend == "Ayı (Aşağı)")
         
@@ -440,19 +458,13 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
         elif signal == "BUY" and yapisal_long_guclu:
             skor += 2
             
-        # --- SPOT FİYAT YAMASI (Saniyelik Gerçek Veri) ---
+        # --- DÜZELTME: SPOT FİYAT YAMASI (Cache'den bağımsız gerçek zamanlı) ---
         gosterim_fiyati = gercek_canli_fiyat
         if market["category"] == "Emtia":
-            try:
-                spot_sym = "XAUUSD=X" if "Altın" in market["name"] else "XAGUSD=X"
-                # Tam canlı fiyatı saniyesinde çekmek için 1d periyot, 1m interval kullanıldı
-                spot_df = veri_indir(spot_sym, "1d", "1m") 
-                if spot_df is not None and not spot_df.empty:
-                    if isinstance(spot_df.columns, pd.MultiIndex):
-                        spot_df.columns = spot_df.columns.get_level_values(0)
-                    gosterim_fiyati = float(spot_df['Close'].iloc[-1])
-            except:
-                pass
+            spot_sym = "XAUUSD=X" if "Altın" in market["name"] else "XAGUSD=X"
+            canli_fiyat = canli_spot_cek(spot_sym)
+            if canli_fiyat:
+                gosterim_fiyati = canli_fiyat
                 
         degisim_yuzdesi = float(((gosterim_fiyati - df['Open'].iloc[-_lookback]) / (df['Open'].iloc[-_lookback] + 1e-10)) * 100)
 
