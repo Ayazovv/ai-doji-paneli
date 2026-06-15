@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AI Doji Terminali - v6.9.6 (Canlı Fiyat Entegrasyonu ve Fırsat Senkronizasyonu)
+AI Doji Terminali - v6.9.7 (Emtia Veri Kaybı Çözüldü, Saf Zamanlı Senkronizasyon)
 """
 
 import streamlit as st
@@ -15,7 +15,7 @@ import traceback
 from sklearn.model_selection import TimeSeriesSplit
 
 # --- SAYFA AYARLARI ---
-st.set_page_config(page_title="AI Doji Terminali v6.9.6", layout="wide", initial_sidebar_state="auto")
+st.set_page_config(page_title="AI Doji Terminali v6.9.7", layout="wide", initial_sidebar_state="auto")
 
 # --- HIZLANDIRICI: CACHE (ÖNBELLEK) FONKSİYONU ---
 @st.cache_data(ttl=300) 
@@ -34,10 +34,10 @@ def canli_spot_cek(symbol):
         pass
     return None
 
-# --- GLOBAL PİYASA TANIMLARI (Altın ve Gümüş Spot Sembollerine Sabitlendi) ---
+# --- GLOBAL PİYASA TANIMLARI (Tarihsel Veri ve Hacim İçin GC=F/SI=F Geri Getirildi) ---
 MARKETS = [
-    {"name": "Altın (XAU/USD)", "symbol": "XAUUSD=X", "tv": "OANDA:XAUUSD", "category": "Emtia", "color": "#F59E0B"},
-    {"name": "Gümüş (XAG/USD)", "symbol": "XAGUSD=X", "tv": "OANDA:XAGUSD", "category": "Emtia", "color": "#94A3B8"},
+    {"name": "Altın (XAU/USD)", "symbol": "GC=F", "tv": "OANDA:XAUUSD", "category": "Emtia", "color": "#F59E0B"},
+    {"name": "Gümüş (XAG/USD)", "symbol": "SI=F", "tv": "OANDA:XAGUSD", "category": "Emtia", "color": "#94A3B8"},
     {"name": "EUR/USD", "symbol": "EURUSD=X", "tv": "OANDA:EURUSD", "category": "Forex", "color": "#3B82F6"},
     {"name": "GBP/USD", "symbol": "GBPUSD=X", "tv": "OANDA:GBPUSD", "category": "Forex", "color": "#8B5CF6"},
     {"name": "USD/JPY", "symbol": "JPY=X", "tv": "OANDA:USDJPY", "category": "Forex", "color": "#10B981"},
@@ -395,7 +395,7 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
         _lookback = {"1h": 24, "4h": 30, "1d": 5}.get(interval, 12)
         _lookback = max(1, min(_lookback, len(df) - 1))
         
-        # --- ANLIK CANLI FİYAT YAMASI VE EŞZAMANLI HESAPLAMA ---
+        # --- CANLI FİYAT ÇEKİMİ (KENDİ VADELİ SEMBOLÜ ÜZERİNDEN MAKAS OLUŞTURMADAN) ---
         gosterim_fiyati = gercek_canli_fiyat
         canli_fiyat = canli_spot_cek(market["symbol"])
         if canli_fiyat:
@@ -418,10 +418,8 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
                 
                 if doji_close > 0:
                     if signal == "SELL":
-                        # Gelecekteki zirve kârını değil, ANLIK OLAN güncel fırsatı hesaplıyor
                         rebound_pct = round(((gosterim_fiyati - doji_close) / doji_close) * 100, 2)
                         
-                        # Yapısal kontrol geçmiş ihlallere (iğnelere) ve canlı fiyata birlikte bakmalı
                         en_dusuk_alinmadi = min(float(gelecek_mumlar_low.min()), gosterim_fiyati) >= doji_low
                         altinda_kapanis_yok = min(float(gelecek_mumlar_close.min()), gosterim_fiyati) >= doji_close
                         
@@ -429,7 +427,6 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
                             yapisal_short_guclu = True
                             
                     elif signal == "BUY":
-                        # Gelecekteki en dip kârını değil, ANLIK OLAN güncel fırsatı hesaplıyor
                         drawdown_pct = round(((doji_close - gosterim_fiyati) / doji_close) * 100, 2)
                         
                         en_yuksek_alinmadi = max(float(gelecek_mumlar_high.max()), gosterim_fiyati) <= doji_high
@@ -494,7 +491,7 @@ st.markdown("""
 # --- SOL MENÜ NAVİGASYONU (SIDEBAR) ---
 st.sidebar.markdown("""
 <div style='text-align: center; padding: 10px; border-bottom: 1px solid #1E293B; margin-bottom: 20px;'>
-    <h3 style='color: #FFF; margin: 0; font-size: 16px;'>🌐 AI TERMINAL v6.9.6</h3>
+    <h3 style='color: #FFF; margin: 0; font-size: 16px;'>🌐 AI TERMINAL v6.9.7</h3>
 </div>
 """, unsafe_allow_html=True)
 
@@ -538,7 +535,7 @@ if st.session_state.hatalar:
 
 st.markdown(f"""
 <div style="background: linear-gradient(180deg, #0F172A 0%, #020817 100%); border-bottom: 1px solid #1E293B; padding: 15px; margin-bottom: 15px; border-radius: 8px;">
-    <h1 style="margin: 0; font-size: 22px; font-weight: 800; color: #FFF;">🤖 Joe Barbarov AI Terminal v6.9.6</h1>
+    <h1 style="margin: 0; font-size: 22px; font-weight: 800; color: #FFF;">🤖 Joe Barbarov AI Terminal v6.9.7</h1>
     <p style="margin: 0; font-size: 12px; color: #64748B;">Oda: <b>{secilen_sayfa}</b> • Gerçek Zamanlı Veri İşleme & PA Fırsat Sıralaması</p>
 </div>
 """, unsafe_allow_html=True)
@@ -550,7 +547,7 @@ if secilen_sayfa == "🏠 Genel Dashboard":
     with st.spinner("Tüm piyasa dinamikleri sorgulanıyor..."):
         c_val, c_status, c_color = get_crypto_fng()
         n_vol, n_vol_clr, n_hac = get_real_market_dynamics(["AAPL", "TSLA", "NVDA", "MSFT"])
-        e_vol, e_vol_clr, e_hac = get_real_market_dynamics(["XAUUSD=X", "XAGUSD=X"])
+        e_vol, e_vol_clr, e_hac = get_real_market_dynamics(["GC=F", "SI=F"])
         c_vol = "Yüksek 🔥" if c_val > 65 else ("Düşük 💤" if c_val < 35 else "Normal 📊")
         c_vol_clr = "#34D399" if c_val > 65 else ("#64748B" if c_val < 35 else "#F59E0B")
         c_hac = "Güçlü 💰" if c_val > 55 else "Zayıf 📉"
@@ -658,7 +655,7 @@ elif secilen_sayfa == "🇺🇸 NASDAQ Terminali":
 
 elif secilen_sayfa == "👑 Emtia Terminali":
     with st.spinner("Emtia verileri analiz ediliyor..."):
-        e_vol, e_vol_clr, e_hac = get_real_market_dynamics(["XAUUSD=X", "XAGUSD=X"])
+        e_vol, e_vol_clr, e_hac = get_real_market_dynamics(["GC=F", "SI=F"])
         e_bar_color = "#EF4444" if "Kapalı" in e_hac else ("#10B981" if "Güçlü" in e_hac else "#94A3B8")
         p_durum = dinamik_piyasa_durumu("Emtia")
         
