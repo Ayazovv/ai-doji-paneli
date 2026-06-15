@@ -501,7 +501,7 @@ if secilen_sayfa == "🏠 Genel Dashboard":
     with st.spinner("Tüm piyasa dinamikleri sorgulanıyor..."):
         c_val, c_status, c_color = get_crypto_fng()
         n_vol, n_vol_clr, n_hac = get_real_market_dynamics(["AAPL", "TSLA", "NVDA", "MSFT"])
-        e_vol, e_vol_clr, e_hac = get_real_market_dynamics(["GC=F", "SI=F"])
+        e_vol, e_vol_clr, e_hac = get_real_market_dynamics(["XAUUSD=X", "XAGUSD=X"])
         c_vol = "Yüksek 🔥" if c_val > 65 else ("Düşük 💤" if c_val < 35 else "Normal 📊")
         c_vol_clr = "#34D399" if c_val > 65 else ("#64748B" if c_val < 35 else "#F59E0B")
         c_hac = "Güçlü 💰" if c_val > 55 else "Zayıf 📉"
