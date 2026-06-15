@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AI Doji Terminali - v6.6 (Win-Rate Sıralaması, UI İyileştirmeleri, Yapısal PA Filtresi Entegre)
+AI Doji Terminali - v6.8 (Hibrit Emtia Çözümü, PA Fırsat Sıralaması, Dinamik Saatler)
 """
 
 import streamlit as st
@@ -15,14 +15,14 @@ import traceback
 from sklearn.model_selection import TimeSeriesSplit
 
 # --- SAYFA AYARLARI ---
-st.set_page_config(page_title="AI Doji Terminali v6.6", layout="wide", initial_sidebar_state="auto")
+st.set_page_config(page_title="AI Doji Terminali v6.8", layout="wide", initial_sidebar_state="auto")
 
 # --- HIZLANDIRICI: CACHE (ÖNBELLEK) FONKSİYONU ---
 @st.cache_data(ttl=300) 
 def veri_indir(symbol, periyot, interval):
     return yf.download(symbol, period=periyot, interval=interval, progress=False)
 
-# --- GLOBAL PİYASA TANIMLARI ---
+# --- GLOBAL PİYASA TANIMLARI (Yapay zeka için Futures, Görsel için Spot yama yapıldı) ---
 MARKETS = [
     {"name": "Altın (XAU/USD)", "symbol": "GC=F", "tv": "OANDA:XAUUSD", "category": "Emtia", "color": "#F59E0B"},
     {"name": "Gümüş (XAG/USD)", "symbol": "SI=F", "tv": "OANDA:XAGUSD", "category": "Emtia", "color": "#94A3B8"},
@@ -96,8 +96,7 @@ def get_real_market_dynamics(symbols):
             vol_ratio = (atr20 / son_fiyat) * 100
             vol_ratios.append(vol_ratio)
             
-            hacim_sutunu = df['Volume'] if 'Volume' in df.columns else None
-            if hacim_sutunu is not None:
+            if 'Volume' in df.columns and not df['Volume'].isna().all() and not df['Volume'].eq(0).all():
                 aktif_hacim_idx = -1 if df['Volume'].iloc[-1] > 0 else -2
                 son_hacim = df['Volume'].rolling(3).mean().iloc[aktif_hacim_idx]
                 ort_hacim = df['Volume'].rolling(20).mean().iloc[aktif_hacim_idx]
@@ -123,15 +122,30 @@ def get_real_market_dynamics(symbols):
 
 def dinamik_piyasa_durumu(kategori="Genel"):
     if kategori == "Kripto": return "Açık 🟢"
+    
     now_utc = datetime.now(timezone.utc)
-    gun = now_utc.weekday()
+    gun = now_utc.weekday() # 0=Pazartesi, 4=Cuma, 5=Cumartesi, 6=Pazar
     saat = now_utc.hour
     tarih_str = now_utc.strftime("%Y-%m-%d")
     
     NYSE_TATILLER_2026 = ["2026-01-01", "2026-01-19", "2026-02-16", "2026-04-03", "2026-05-25", "2026-06-19", "2026-07-03", "2026-09-07", "2026-11-26", "2026-12-25"]
     
-    if tarih_str in NYSE_TATILLER_2026: return "Tatil 💤"
-    if gun == 5 or gun == 6 or (gun == 4 and saat >= 21): return "Kapalı 💤"
+    if tarih_str in NYSE_TATILLER_2026 and kategori in ["NASDAQ", "Genel"]: 
+        return "Tatil 💤"
+        
+    # --- FOREX VE EMTİA ÖZEL ÇALIŞMA SAATLERİ (Pazar 22:00 UTC Açılır - Cuma 22:00 UTC Kapanır) ---
+    if kategori in ["Forex", "Emtia"]:
+        if gun == 5: return "Kapalı 💤"
+        if gun == 6 and saat < 22: return "Kapalı 💤"
+        if gun == 4 and saat >= 22: return "Kapalı 💤"
+        return "Açık 🟢"
+        
+    # --- STANDART HİSSE VE ENDEKS BORSALARI (Hafta sonu filtresi) ---
+    if gun == 5 or gun == 6: 
+        return "Kapalı 💤"
+    if gun == 4 and saat >= 21: 
+        return "Kapalı 💤"
+        
     return "Açık 🟢"
 
 def piyasa_rejimi_hesapla(symbol):
@@ -220,8 +234,13 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
         
         df['Upper_Shadow'] = (df['High'] - df[['Open', 'Close']].max(axis=1)) / (df['High'] - df['Low'] + 1e-10)
         df['Lower_Shadow'] = (df[['Open', 'Close']].min(axis=1) - df['Low']) / (df['High'] - df['Low'] + 1e-10)
-        df['Volume_Shock'] = df['Volume'].rolling(5).mean() / (df['Volume'].rolling(20).mean() + 1e-10)
         
+        # --- HACİM (VOLUME) GÜVENLİK YAMASI ---
+        if 'Volume' in df.columns and not df['Volume'].isna().all() and not df['Volume'].eq(0).all():
+            df['Volume_Shock'] = df['Volume'].rolling(5).mean() / (df['Volume'].rolling(20).mean() + 1e-10)
+        else:
+            df['Volume_Shock'] = 1.0 # Hacim verisi yoksa modeli bozmamak için nötr (1.0) kabul et
+            
         ema12 = df['Close'].ewm(span=12, adjust=False).mean()
         ema26 = df['Close'].ewm(span=26, adjust=False).mean()
         macd_line = ema12 - ema26
@@ -255,7 +274,7 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
             'RSI', 'Price_to_EMA20', 'ATR', 'Upper_Shadow', 'Lower_Shadow', 
             'MACD_Hist', 'BB_Width', 'Price_to_BB', 'Trend_Slope'
         ]
-        if market["category"] not in ["Forex", "Özel"]: features.append('Volume_Shock')
+        if market["category"] not in ["Forex", "Emtia", "Özel"]: features.append('Volume_Shock')
         
         feature_names_tr = {
             'RSI': 'RSI', 'Price_to_EMA20': 'Trend Uzaklığı', 'ATR': 'Volatilite',
@@ -408,11 +427,24 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
             skor += 2
         elif signal == "BUY" and yapisal_long_guclu:
             skor += 2
+            
+        # --- SPOT FİYAT YAMASI (SADECE EKRANDA GÖSTERİM İÇİN) ---
+        gosterim_fiyati = float(df['Close'].iloc[-1])
+        if market["category"] == "Emtia":
+            try:
+                spot_sym = "XAU=X" if "Altın" in market["name"] else "XAG=X"
+                spot_df = veri_indir(spot_sym, "5d", "1d")
+                if spot_df is not None and not spot_df.empty:
+                    if isinstance(spot_df.columns, pd.MultiIndex):
+                        spot_df.columns = spot_df.columns.get_level_values(0)
+                    gosterim_fiyati = float(spot_df['Close'].iloc[-1])
+            except:
+                pass
         
         return {
             "hoursAgo": gecen_mum, "signal": signal, "rsi": rsi_val, "confidence": guven_orani,
             "winRate": win_rate, "totalSignals": toplam_sinyal, "bigTrend": big_trend,
-            "price": float(df['Close'].iloc[-1]), "skor": skor,
+            "price": gosterim_fiyati, "skor": skor,
             "change": float(((df['Close'].iloc[-1] - df['Open'].iloc[-_lookback]) / (df['Open'].iloc[-_lookback] + 1e-10)) * 100),
             "dojiType": doji_type, "topFeatures": en_etkili_faktorler,
             "reboundPct": rebound_pct, "drawdownPct": drawdown_pct,
@@ -447,7 +479,7 @@ st.markdown("""
 # --- SOL MENÜ NAVİGASYONU (SIDEBAR) ---
 st.sidebar.markdown("""
 <div style='text-align: center; padding: 10px; border-bottom: 1px solid #1E293B; margin-bottom: 20px;'>
-    <h3 style='color: #FFF; margin: 0; font-size: 16px;'>🌐 AI TERMINAL v6.6</h3>
+    <h3 style='color: #FFF; margin: 0; font-size: 16px;'>🌐 AI TERMINAL v6.8</h3>
 </div>
 """, unsafe_allow_html=True)
 
@@ -489,8 +521,8 @@ if st.session_state.hatalar:
 
 st.markdown(f"""
 <div style="background: linear-gradient(180deg, #0F172A 0%, #020817 100%); border-bottom: 1px solid #1E293B; padding: 15px; margin-bottom: 15px; border-radius: 8px;">
-    <h1 style="margin: 0; font-size: 22px; font-weight: 800; color: #FFF;">🤖 Joe Barbarov AI Terminal v6.6</h1>
-    <p style="margin: 0; font-size: 12px; color: #64748B;">Oda: <b>{secilen_sayfa}</b> • Win-Rate Sıralaması & Drawdown/Rebound Aktif</p>
+    <h1 style="margin: 0; font-size: 22px; font-weight: 800; color: #FFF;">🤖 Joe Barbarov AI Terminal v6.8</h1>
+    <p style="margin: 0; font-size: 12px; color: #64748B;">Oda: <b>{secilen_sayfa}</b> • Spot Fiyat Yaması & PA Fırsat Sıralaması</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -678,7 +710,7 @@ if st.button(f"🚀 {sayfa_adi_temiz} İçin Sinyal Taraması Başlat"):
         st.session_state.results = yeni_sonuclar
         st.rerun()
 
-# --- SİNYAL KARTLARI (WIN-RATE SIRALAMASI VE TOOLTIP DÜZELTMESİ) ---
+# --- SİNYAL KARTLARI (PA FIRSAT SIRALAMASI) ---
 ham_sinyaller = {k: v for k, v in st.session_state.results.items() if v["market"] in aktif_list}
 if st.session_state.strict_mode:
     ham_sinyaller = {k: v for k, v in ham_sinyaller.items() if v["result"].get("skor", 0) >= 5}
@@ -686,7 +718,10 @@ if st.session_state.strict_mode:
 valid_signals = dict(
     sorted(
         ham_sinyaller.items(), 
-        key=lambda x: x[1]["result"].get("winRate", 0), 
+        key=lambda x: (
+            x[1]["result"].get("reboundPct", 0.0),  
+            x[1]["result"].get("drawdownPct", 0.0)  
+        ), 
         reverse=True
     )
 )
@@ -722,11 +757,10 @@ else:
                     elif rb >= 0.4: st.info(f"⚠️ Orta Tepe Fırsatı (+%{rb:.2f})")
                     elif rb > 0: st.success(f"💤 Zayıf Tepe Fırsatı (+%{rb:.2f})")
                     
-                    # 6 Haziran SHORT Uyarısı
                     if r.get("yapisalShortGuclu", False):
                         st.markdown("""
                         <div style='background-color: rgba(239, 68, 68, 0.15); padding: 10px; border-radius: 6px; border-left: 4px solid #EF4444; margin-top: 8px; margin-bottom: 5px;'>
-                            <span style='color: #F87171; font-weight: 700; font-size: 13px;'>🎯 6 HAZİRAN BLOK YAPISI AKTİF (SHORT GÜÇLÜ)</span><br>
+                            <span style='color: #F87171; font-weight: 700; font-size: 13px;'>🎯 YAPISAL BLOK AKTİF (SHORT GÜÇLÜ)</span><br>
                             <span style='color: #CBD5E1; font-size: 11px;'>Sinyal mumunun en düşüğü kırılmadı veya altında gövde kapanışı gelmedi. Fiyat yukarı esnedikçe SHORT yönlü baskı ve R/R oranı maksimize oluyor! (+2 Ek Skor uygulandı)</span>
                         </div>
                         """, unsafe_allow_html=True)
@@ -737,7 +771,6 @@ else:
                     elif dd >= 0.4: st.warning(f"⚠️ Orta Dip Fırsatı (-%{dd:.2f})")
                     elif dd > 0: st.error(f"💤 Zayıf Dip Fırsatı (-%{dd:.2f})")
                     
-                    # Simetrik LONG Uyarısı
                     if r.get("yapisalLongGuclu", False):
                         st.markdown("""
                         <div style='background-color: rgba(16, 185, 129, 0.15); padding: 10px; border-radius: 6px; border-left: 4px solid #10B981; margin-top: 8px; margin-bottom: 5px;'>
