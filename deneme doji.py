@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AI Doji Terminali - v6.9.3 (Kusursuz ML Hedef Hizalaması ve Dönüş Mantığı)
+AI Doji Terminali - v6.9.4 (Production Release - Kusursuz ML & Sinyal Motoru)
 """
 
 import streamlit as st
@@ -15,7 +15,7 @@ import traceback
 from sklearn.model_selection import TimeSeriesSplit
 
 # --- SAYFA AYARLARI ---
-st.set_page_config(page_title="AI Doji Terminali v6.9.3", layout="wide", initial_sidebar_state="auto")
+st.set_page_config(page_title="AI Doji Terminali v6.9.4", layout="wide", initial_sidebar_state="auto")
 
 # --- HIZLANDIRICI: CACHE (ÖNBELLEK) FONKSİYONU ---
 @st.cache_data(ttl=300) 
@@ -275,9 +275,7 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
         suanki_fiyat = df['Close']
         ilerideki_kapanis = df['Close'].shift(-int(min_hours))
         
-        # 🔴 KRİTİK DÜZELTME: FixedForwardWindowIndexer Çöpe Atıldı!
-        # Matematiksel olarak kusursuz hizalama: N mumluk geriye dönük min/max hesaplanır,
-        # ardından bu değerler tam N mum geriye itilerek (shift) i. muma i+1'den i+N'ye kadar olan aralık kusursuzca hizalanır.
+        # ML Eğitimi İçin Kusursuz SL/TP Penceresi Hizalaması (i+1 to i+N)
         ilerideki_min = df['Low'].rolling(window=int(min_hours)).min().shift(-int(min_hours))
         ilerideki_max = df['High'].rolling(window=int(min_hours)).max().shift(-int(min_hours))
         
@@ -396,7 +394,6 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
         else: doji_type = "Standard"    
         
         _lookback = {"1h": 24, "4h": 30, "1d": 5}.get(interval, 12)
-        # 🟡 DÜZELTME: Lookback eksiye veya sıfıra düşmesin diye sınır eklendi
         _lookback = max(1, min(_lookback, len(df) - 1))
         
         rebound_pct = 0.0
@@ -449,7 +446,7 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
         if (signal == "BUY" and rsi_val < 35) or (signal == "SELL" and rsi_val > 65): skor += 2
         if (signal == "BUY" and price_to_bb < 0.2) or (signal == "SELL" and price_to_bb > 0.8): skor += 1
         
-        # 🟡 DÜZELTME: Doji formasyonları dönüş arar. MACD uyumsuzluğu (ters bölgede olma) skor artırır.
+        # MACD'nin doji dönüşlerinde fiyata olan ters (aşırı satım/alım) konumu değerlendirildi
         if (signal == "BUY" and macd_hist < 0) or (signal == "SELL" and macd_hist > 0): skor += 1
         if signal == "SELL" and yapisal_short_guclu: skor += 2
         elif signal == "BUY" and yapisal_long_guclu: skor += 2
@@ -502,7 +499,7 @@ st.markdown("""
 # --- SOL MENÜ NAVİGASYONU (SIDEBAR) ---
 st.sidebar.markdown("""
 <div style='text-align: center; padding: 10px; border-bottom: 1px solid #1E293B; margin-bottom: 20px;'>
-    <h3 style='color: #FFF; margin: 0; font-size: 16px;'>🌐 AI TERMINAL v6.9.3</h3>
+    <h3 style='color: #FFF; margin: 0; font-size: 16px;'>🌐 AI TERMINAL v6.9.4</h3>
 </div>
 """, unsafe_allow_html=True)
 
@@ -546,7 +543,7 @@ if st.session_state.hatalar:
 
 st.markdown(f"""
 <div style="background: linear-gradient(180deg, #0F172A 0%, #020817 100%); border-bottom: 1px solid #1E293B; padding: 15px; margin-bottom: 15px; border-radius: 8px;">
-    <h1 style="margin: 0; font-size: 22px; font-weight: 800; color: #FFF;">🤖 Joe Barbarov AI Terminal v6.9.3</h1>
+    <h1 style="margin: 0; font-size: 22px; font-weight: 800; color: #FFF;">🤖 Joe Barbarov AI Terminal v6.9.4</h1>
     <p style="margin: 0; font-size: 12px; color: #64748B;">Oda: <b>{secilen_sayfa}</b> • Gerçek Zamanlı Veri İşleme & PA Fırsat Sıralaması</p>
 </div>
 """, unsafe_allow_html=True)
