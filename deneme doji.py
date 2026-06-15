@@ -24,8 +24,8 @@ def veri_indir(symbol, periyot, interval):
 
 # --- GLOBAL PİYASA TANIMLARI ---
 MARKETS = [
-    {"name": "Altın (XAU/USD)", "symbol": "XAU=X", "tv": "OANDA:XAUUSD", "category": "Emtia", "color": "#F59E0B"},
-    {"name": "Gümüş (XAG/USD)", "symbol": "XAG=X", "tv": "OANDA:XAGUSD", "category": "Emtia", "color": "#94A3B8"},
+    {"name": "Altın (XAU/USD)", "symbol": "XAUUSD=X", "tv": "OANDA:XAUUSD", "category": "Emtia", "color": "#F59E0B"},
+    {"name": "Gümüş (XAG/USD)", "symbol": "XAGUSD=X", "tv": "OANDA:XAGUSD", "category": "Emtia", "color": "#94A3B8"},
     {"name": "EUR/USD", "symbol": "EURUSD=X", "tv": "OANDA:EURUSD", "category": "Forex", "color": "#3B82F6"},
     {"name": "GBP/USD", "symbol": "GBPUSD=X", "tv": "OANDA:GBPUSD", "category": "Forex", "color": "#8B5CF6"},
     {"name": "USD/JPY", "symbol": "JPY=X", "tv": "OANDA:USDJPY", "category": "Forex", "color": "#10B981"},
