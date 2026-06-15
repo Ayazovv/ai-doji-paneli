@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AI Doji Terminali - v6.7 (Spot Fiyat Senkronizasyonu, PA Fırsat Sıralaması, Dinamik Saatler)
+AI Doji Terminali - v6.8 (Hibrit Emtia Çözümü, PA Fırsat Sıralaması, Dinamik Saatler)
 """
 
 import streamlit as st
@@ -15,17 +15,17 @@ import traceback
 from sklearn.model_selection import TimeSeriesSplit
 
 # --- SAYFA AYARLARI ---
-st.set_page_config(page_title="AI Doji Terminali v6.7", layout="wide", initial_sidebar_state="auto")
+st.set_page_config(page_title="AI Doji Terminali v6.8", layout="wide", initial_sidebar_state="auto")
 
 # --- HIZLANDIRICI: CACHE (ÖNBELLEK) FONKSİYONU ---
 @st.cache_data(ttl=300) 
 def veri_indir(symbol, periyot, interval):
     return yf.download(symbol, period=periyot, interval=interval, progress=False)
 
-# --- GLOBAL PİYASA TANIMLARI ---
+# --- GLOBAL PİYASA TANIMLARI (Yapay zeka için Futures, Görsel için Spot yama yapıldı) ---
 MARKETS = [
-    {"name": "Altın (XAU/USD)", "symbol": "XAUUSD=X", "tv": "OANDA:XAUUSD", "category": "Emtia", "color": "#F59E0B"},
-    {"name": "Gümüş (XAG/USD)", "symbol": "XAGUSD=X", "tv": "OANDA:XAGUSD", "category": "Emtia", "color": "#94A3B8"},
+    {"name": "Altın (XAU/USD)", "symbol": "GC=F", "tv": "OANDA:XAUUSD", "category": "Emtia", "color": "#F59E0B"},
+    {"name": "Gümüş (XAG/USD)", "symbol": "SI=F", "tv": "OANDA:XAGUSD", "category": "Emtia", "color": "#94A3B8"},
     {"name": "EUR/USD", "symbol": "EURUSD=X", "tv": "OANDA:EURUSD", "category": "Forex", "color": "#3B82F6"},
     {"name": "GBP/USD", "symbol": "GBPUSD=X", "tv": "OANDA:GBPUSD", "category": "Forex", "color": "#8B5CF6"},
     {"name": "USD/JPY", "symbol": "JPY=X", "tv": "OANDA:USDJPY", "category": "Forex", "color": "#10B981"},
@@ -96,7 +96,6 @@ def get_real_market_dynamics(symbols):
             vol_ratio = (atr20 / son_fiyat) * 100
             vol_ratios.append(vol_ratio)
             
-            # Spot varlıklar (XAG/USD vb.) hacim vermediği için koruma eklendi
             if 'Volume' in df.columns and not df['Volume'].isna().all() and not df['Volume'].eq(0).all():
                 aktif_hacim_idx = -1 if df['Volume'].iloc[-1] > 0 else -2
                 son_hacim = df['Volume'].rolling(3).mean().iloc[aktif_hacim_idx]
@@ -240,7 +239,7 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
         if 'Volume' in df.columns and not df['Volume'].isna().all() and not df['Volume'].eq(0).all():
             df['Volume_Shock'] = df['Volume'].rolling(5).mean() / (df['Volume'].rolling(20).mean() + 1e-10)
         else:
-            df['Volume_Shock'] = 1.0 # Spot piyasada hacim verisi yoksa modeli bozmamak için nötr (1.0) kabul et
+            df['Volume_Shock'] = 1.0 # Hacim verisi yoksa modeli bozmamak için nötr (1.0) kabul et
             
         ema12 = df['Close'].ewm(span=12, adjust=False).mean()
         ema26 = df['Close'].ewm(span=26, adjust=False).mean()
@@ -428,11 +427,24 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
             skor += 2
         elif signal == "BUY" and yapisal_long_guclu:
             skor += 2
+            
+        # --- SPOT FİYAT YAMASI (SADECE EKRANDA GÖSTERİM İÇİN) ---
+        gosterim_fiyati = float(df['Close'].iloc[-1])
+        if market["category"] == "Emtia":
+            try:
+                spot_sym = "XAU=X" if "Altın" in market["name"] else "XAG=X"
+                spot_df = veri_indir(spot_sym, "5d", "1d")
+                if spot_df is not None and not spot_df.empty:
+                    if isinstance(spot_df.columns, pd.MultiIndex):
+                        spot_df.columns = spot_df.columns.get_level_values(0)
+                    gosterim_fiyati = float(spot_df['Close'].iloc[-1])
+            except:
+                pass
         
         return {
             "hoursAgo": gecen_mum, "signal": signal, "rsi": rsi_val, "confidence": guven_orani,
             "winRate": win_rate, "totalSignals": toplam_sinyal, "bigTrend": big_trend,
-            "price": float(df['Close'].iloc[-1]), "skor": skor,
+            "price": gosterim_fiyati, "skor": skor,
             "change": float(((df['Close'].iloc[-1] - df['Open'].iloc[-_lookback]) / (df['Open'].iloc[-_lookback] + 1e-10)) * 100),
             "dojiType": doji_type, "topFeatures": en_etkili_faktorler,
             "reboundPct": rebound_pct, "drawdownPct": drawdown_pct,
@@ -467,7 +479,7 @@ st.markdown("""
 # --- SOL MENÜ NAVİGASYONU (SIDEBAR) ---
 st.sidebar.markdown("""
 <div style='text-align: center; padding: 10px; border-bottom: 1px solid #1E293B; margin-bottom: 20px;'>
-    <h3 style='color: #FFF; margin: 0; font-size: 16px;'>🌐 AI TERMINAL v6.7</h3>
+    <h3 style='color: #FFF; margin: 0; font-size: 16px;'>🌐 AI TERMINAL v6.8</h3>
 </div>
 """, unsafe_allow_html=True)
 
@@ -509,8 +521,8 @@ if st.session_state.hatalar:
 
 st.markdown(f"""
 <div style="background: linear-gradient(180deg, #0F172A 0%, #020817 100%); border-bottom: 1px solid #1E293B; padding: 15px; margin-bottom: 15px; border-radius: 8px;">
-    <h1 style="margin: 0; font-size: 22px; font-weight: 800; color: #FFF;">🤖 Joe Barbarov AI Terminal v6.7</h1>
-    <p style="margin: 0; font-size: 12px; color: #64748B;">Oda: <b>{secilen_sayfa}</b> • PA Fırsat Sıralaması & Drawdown/Rebound Aktif</p>
+    <h1 style="margin: 0; font-size: 22px; font-weight: 800; color: #FFF;">🤖 Joe Barbarov AI Terminal v6.8</h1>
+    <p style="margin: 0; font-size: 12px; color: #64748B;">Oda: <b>{secilen_sayfa}</b> • Spot Fiyat Yaması & PA Fırsat Sıralaması</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -521,7 +533,7 @@ if secilen_sayfa == "🏠 Genel Dashboard":
     with st.spinner("Tüm piyasa dinamikleri sorgulanıyor..."):
         c_val, c_status, c_color = get_crypto_fng()
         n_vol, n_vol_clr, n_hac = get_real_market_dynamics(["AAPL", "TSLA", "NVDA", "MSFT"])
-        e_vol, e_vol_clr, e_hac = get_real_market_dynamics(["XAUUSD=X", "XAGUSD=X"])
+        e_vol, e_vol_clr, e_hac = get_real_market_dynamics(["GC=F", "SI=F"])
         c_vol = "Yüksek 🔥" if c_val > 65 else ("Düşük 💤" if c_val < 35 else "Normal 📊")
         c_vol_clr = "#34D399" if c_val > 65 else ("#64748B" if c_val < 35 else "#F59E0B")
         c_hac = "Güçlü 💰" if c_val > 55 else "Zayıf 📉"
@@ -629,7 +641,7 @@ elif secilen_sayfa == "🇺🇸 NASDAQ Terminali":
 
 elif secilen_sayfa == "👑 Emtia Terminali":
     with st.spinner("Emtia verileri analiz ediliyor..."):
-        e_vol, e_vol_clr, e_hac = get_real_market_dynamics(["XAUUSD=X", "XAGUSD=X"])
+        e_vol, e_vol_clr, e_hac = get_real_market_dynamics(["GC=F", "SI=F"])
         e_bar_color = "#EF4444" if "Kapalı" in e_hac else ("#10B981" if "Güçlü" in e_hac else "#94A3B8")
         p_durum = dinamik_piyasa_durumu("Emtia")
         
@@ -703,7 +715,6 @@ ham_sinyaller = {k: v for k, v in st.session_state.results.items() if v["market"
 if st.session_state.strict_mode:
     ham_sinyaller = {k: v for k, v in ham_sinyaller.items() if v["result"].get("skor", 0) >= 5}
 
-# Tarama sonuçları Win-Rate'e göre değil; "Rebound" (Tepe) ve "Drawdown" (Dip) fırsatlarına göre büyükten küçüğe sıralanır.
 valid_signals = dict(
     sorted(
         ham_sinyaller.items(), 
@@ -749,7 +760,7 @@ else:
                     if r.get("yapisalShortGuclu", False):
                         st.markdown("""
                         <div style='background-color: rgba(239, 68, 68, 0.15); padding: 10px; border-radius: 6px; border-left: 4px solid #EF4444; margin-top: 8px; margin-bottom: 5px;'>
-                            <span style='color: #F87171; font-weight: 700; font-size: 13px;'>🎯 6 HAZİRAN BLOK YAPISI AKTİF (SHORT GÜÇLÜ)</span><br>
+                            <span style='color: #F87171; font-weight: 700; font-size: 13px;'>🎯 YAPISAL BLOK AKTİF (SHORT GÜÇLÜ)</span><br>
                             <span style='color: #CBD5E1; font-size: 11px;'>Sinyal mumunun en düşüğü kırılmadı veya altında gövde kapanışı gelmedi. Fiyat yukarı esnedikçe SHORT yönlü baskı ve R/R oranı maksimize oluyor! (+2 Ek Skor uygulandı)</span>
                         </div>
                         """, unsafe_allow_html=True)
