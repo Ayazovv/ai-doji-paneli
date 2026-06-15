@@ -257,14 +257,20 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
         tam_veri_uzunlugu = len(df)
         df['Gercek_Sira'] = range(tam_veri_uzunlugu)
         
-        # Hedef Hesaplama
+        # --- HEDEF (TARGET) HESAPLAMA (GÜNCELLENDİ) ---
         suanki_fiyat = df['Close']
         ilerideki_kapanis = df['Close'].shift(-int(min_hours))
         indexer = pd.api.indexers.FixedForwardWindowIndexer(window_size=int(min_hours))
-        ilerideki_min = df['Low'].shift(-1).rolling(window=indexer).min()
         
+        ilerideki_min = df['Low'].shift(-1).rolling(window=indexer).min()
+        ilerideki_max = df['High'].shift(-1).rolling(window=indexer).max() # SHORT STOPU İÇİN EKLENDİ!
+        
+        # BUY (Long): Vade içinde %1 kar al VE %1 stop'a çarpma
         buy_target = np.where((ilerideki_kapanis > suanki_fiyat * 1.01) & (ilerideki_min >= suanki_fiyat * 0.99), 1, 0)
-        sell_target = np.where(ilerideki_kapanis < suanki_fiyat * 0.99, 1, 0)
+        
+        # SELL (Short): Vade içinde %1 kar al VE %1 stop'a (yukarı iğne) çarpma!
+        sell_target = np.where((ilerideki_kapanis < suanki_fiyat * 0.99) & (ilerideki_max <= suanki_fiyat * 1.01), 1, 0)
+        
         df['Hedef'] = np.where(buy_target == 1, 1, np.where(sell_target == 1, 0, -1))
         
         # --- SADECE EĞİTİM İÇİN VERİYİ KES (ANA DF BOZULMAZ!) ---
@@ -306,17 +312,20 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
             
         gecen_mum = min(olgun_dojiler)
             
-        # --- YAPAY ZEKA EĞİTİM VE CANLI TAHMİN ---
-        # Eğitimi tüm mumlarda değil, SADECE geçmişteki Doji'ler üzerinde yap
+        # --- YAPAY ZEKA EĞİTİM VERİSİ VE ÇÖKME KORUMASI ---
         doji_train_df = train_df[train_df['Doji'] == True]
         
-        if len(doji_train_df) >= 20: 
+        # EĞER Doji listesi doluysa ve içinde hem 0 hem 1 sonuçları varsa sadece Doji'lere odaklan
+        if len(doji_train_df) >= 20 and len(doji_train_df['Hedef'].unique()) > 1: 
             X = doji_train_df[features]
             y = doji_train_df['Hedef']
-        else:
+        # EĞER Doji'lerin hepsi aynı sonuçlanmışsa XGBoost çökmesin diye tüm veriye (train_df) bak
+        elif len(train_df['Hedef'].unique()) > 1:
             X = train_df[features]
             y = train_df['Hedef']
-        
+        else:
+            return None # Tüm geçmiş veri dümdüzse işlem yapma pas geç
+            
         win_rate, toplam_sinyal = 50, 0
         en_etkili_faktorler = {}
         
