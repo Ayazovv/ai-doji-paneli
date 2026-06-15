@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AI Doji Terminali - v6.9.8 (API Optimizasyonu ve Yapısal Mum Sınırlandırması)
+AI Doji Terminali - v6.9.10 (Doji ve Zirve/Dip Fırsatlarının Tamamen Ayrıştırılması)
 """
 
 import streamlit as st
@@ -15,7 +15,7 @@ import traceback
 from sklearn.model_selection import TimeSeriesSplit
 
 # --- SAYFA AYARLARI ---
-st.set_page_config(page_title="AI Doji Terminali v6.9.8", layout="wide", initial_sidebar_state="auto")
+st.set_page_config(page_title="AI Doji Terminali v6.9.10", layout="wide", initial_sidebar_state="auto")
 
 # --- HIZLANDIRICI: CACHE (ÖNBELLEK) FONKSİYONU ---
 @st.cache_data(ttl=300) 
@@ -395,22 +395,30 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
         _lookback = {"1h": 24, "4h": 30, "1d": 5}.get(interval, 12)
         _lookback = max(1, min(_lookback, len(df) - 1))
         
-        # --- SADECE EMTİA İÇİN ANLIK CANLI FİYAT YAMASI ---
+        # --- CANLI FİYAT YAMASI ---
         gosterim_fiyati = gercek_canli_fiyat
         if market["category"] == "Emtia":
             canli_fiyat = canli_spot_cek(market["symbol"])
             if canli_fiyat:
                 gosterim_fiyati = canli_fiyat
                 
-        rebound_pct = 0.0
-        drawdown_pct = 0.0
+        # --- BAĞIMSIZ TEPE VE DİP HESAPLAMASI (DOJİDEN KOPARILDI) ---
+        recent_peak = float(max(df['High'].tail(_lookback).max(), gosterim_fiyati))
+        recent_dip  = float(min(df['Low'].tail(_lookback).min(), gosterim_fiyati))
+        
+        firsat_farki_pct = 0.0
+        if signal == "SELL":
+            # Zirveden anlık fiyata yüzde kaç DÜŞÜŞ oldu?
+            firsat_farki_pct = round(((recent_peak - gosterim_fiyati) / recent_peak) * 100, 2)
+        elif signal == "BUY":
+            # Dipten anlık fiyata yüzde kaç YÜKSELİŞ oldu?
+            firsat_farki_pct = round(((gosterim_fiyati - recent_dip) / recent_dip) * 100, 2)
+
+        # Doji seviyesinin kırılıp kırılmadığını kontrol eden yapısal AI koşulu
         yapisal_short_guclu = False 
         yapisal_long_guclu = False  
-        
         if gecen_mum > 0:
             son_hedef_idx = doji_iloc + 1 + gecen_mum
-            
-            # --- DÜZELTME: GELECEK MUMLAR DİLİMİ KESİN SINIRLANDIRILDI ---
             gelecek_mumlar_high = df['High'].iloc[doji_iloc + 1 : son_hedef_idx]
             gelecek_mumlar_low = df['Low'].iloc[doji_iloc + 1 : son_hedef_idx]
             gelecek_mumlar_close = df['Close'].iloc[doji_iloc + 1 : son_hedef_idx]
@@ -422,20 +430,13 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
                 
                 if doji_close > 0:
                     if signal == "SELL":
-                        rebound_pct = round(((gosterim_fiyati - doji_close) / doji_close) * 100, 2)
-                        
                         en_dusuk_alinmadi = min(float(gelecek_mumlar_low.min()), gosterim_fiyati) >= doji_low
                         altinda_kapanis_yok = min(float(gelecek_mumlar_close.min()), gosterim_fiyati) >= doji_close
-                        
                         if (en_dusuk_alinmadi or altinda_kapanis_yok) and (gosterim_fiyati > doji_close):
                             yapisal_short_guclu = True
-                            
                     elif signal == "BUY":
-                        drawdown_pct = round(((doji_close - gosterim_fiyati) / doji_close) * 100, 2)
-                        
                         en_yuksek_alinmadi = max(float(gelecek_mumlar_high.max()), gosterim_fiyati) <= doji_high
                         ustunde_kapanis_yok = max(float(gelecek_mumlar_close.max()), gosterim_fiyati) <= doji_close
-                        
                         if (en_yuksek_alinmadi or ustunde_kapanis_yok) and (gosterim_fiyati < doji_close):
                             yapisal_long_guclu = True
 
@@ -465,7 +466,8 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
             "price": gosterim_fiyati, "skor": skor,
             "change": degisim_yuzdesi,
             "dojiType": doji_type, "topFeatures": en_etkili_faktorler,
-            "reboundPct": rebound_pct, "drawdownPct": drawdown_pct,
+            "firsatFarkiPct": firsat_farki_pct,
+            "lookback": _lookback,
             "yapisalShortGuclu": yapisal_short_guclu,
             "yapisalLongGuclu": yapisal_long_guclu
         }
@@ -495,7 +497,7 @@ st.markdown("""
 # --- SOL MENÜ NAVİGASYONU (SIDEBAR) ---
 st.sidebar.markdown("""
 <div style='text-align: center; padding: 10px; border-bottom: 1px solid #1E293B; margin-bottom: 20px;'>
-    <h3 style='color: #FFF; margin: 0; font-size: 16px;'>🌐 AI TERMINAL v6.9.8</h3>
+    <h3 style='color: #FFF; margin: 0; font-size: 16px;'>🌐 AI TERMINAL v6.9.10</h3>
 </div>
 """, unsafe_allow_html=True)
 
@@ -539,7 +541,7 @@ if st.session_state.hatalar:
 
 st.markdown(f"""
 <div style="background: linear-gradient(180deg, #0F172A 0%, #020817 100%); border-bottom: 1px solid #1E293B; padding: 15px; margin-bottom: 15px; border-radius: 8px;">
-    <h1 style="margin: 0; font-size: 22px; font-weight: 800; color: #FFF;">🤖 Joe Barbarov AI Terminal v6.9.8</h1>
+    <h1 style="margin: 0; font-size: 22px; font-weight: 800; color: #FFF;">🤖 Joe Barbarov AI Terminal v6.9.10</h1>
     <p style="margin: 0; font-size: 12px; color: #64748B;">Oda: <b>{secilen_sayfa}</b> • Gerçek Zamanlı Veri İşleme & PA Fırsat Sıralaması</p>
 </div>
 """, unsafe_allow_html=True)
@@ -736,10 +738,11 @@ ham_sinyaller = {k: v for k, v in st.session_state.results.items() if v["market"
 if st.session_state.strict_mode:
     ham_sinyaller = {k: v for k, v in ham_sinyaller.items() if v["result"].get("skor", 0) >= 5}
 
+# Sinyalleri Dojiden bağımsız olan "Fırsat Farkına" (Dipten/Tepeden ne kadar koptuğuna) göre sıralar
 valid_signals = dict(
     sorted(
         ham_sinyaller.items(), 
-        key=lambda x: max(x[1]["result"].get("reboundPct", 0.0), x[1]["result"].get("drawdownPct", 0.0)), 
+        key=lambda x: x[1]["result"].get("firsatFarkiPct", 0.0), 
         reverse=True
     )
 )
@@ -764,41 +767,42 @@ else:
             with col1:
                 st.subheader(f"{m['name']}  :{'green' if is_buy else 'red'}[{r['signal']}]")
                 st.write(f"{rozet_ikon} **Skor:** {skor_seviyesi}/10 — {rozet_metni}")
-                st.write(f"⏳ **Doji Yaşı:** {r['hoursAgo']} Mum Önce ({r['dojiType']} Doji)")
                 st.caption(f"**Büyük Trend (4h):** {r['bigTrend']} | {'🔥 Uyumlu' if is_confluence else '⚠️ Trend Tersi Riskli'}")
+                st.markdown("---")
                 
-                if not is_buy:
-                    rb = r.get("reboundPct", 0.0)
-                    if rb >= 2.0: st.error(f"🚨 Mükemmel Şort Girişi (+%{rb:.2f})")
-                    elif rb >= 1.0: st.error(f"🔥 Güçlü Şort Girişi (+%{rb:.2f})")
-                    elif rb >= 0.4: st.warning(f"⚠️ İdeal Şort Girişi (+%{rb:.2f})")
-                    elif rb > 0: st.info(f"💤 Zayıf Giriş (+%{rb:.2f})")
-                    else: st.markdown(f"<span style='color: #64748B;'>⏳ Geç Kalındı: Fiyat Zaten Düştü ({rb:.2f}%)</span>", unsafe_allow_html=True)
-                    
-                    if r.get("yapisalShortGuclu", False) and rb > 0:
-                        st.markdown("""
-                        <div style='background-color: rgba(239, 68, 68, 0.15); padding: 10px; border-radius: 6px; border-left: 4px solid #EF4444; margin-top: 8px; margin-bottom: 5px;'>
-                            <span style='color: #F87171; font-weight: 700; font-size: 13px;'>🎯 YAPISAL BLOK AKTİF (SHORT GÜÇLÜ)</span><br>
-                            <span style='color: #CBD5E1; font-size: 11px;'>Sinyal mumundan bu yana en düşük kırılmadı. Fiyat şu an yukarıda, SHORT yönlü baskı ve R/R oranı maksimize durumda!</span>
-                        </div>
-                        """, unsafe_allow_html=True)
-                else:
-                    dd = r.get("drawdownPct", 0.0)
-                    if dd >= 2.0: st.success(f"🚨 Mükemmel Long Girişi (-%{dd:.2f})")
-                    elif dd >= 1.0: st.success(f"🔥 Güçlü Long Girişi (-%{dd:.2f})")
-                    elif dd >= 0.4: st.info(f"⚠️ İdeal Long Girişi (-%{dd:.2f})")
-                    elif dd > 0: st.write(f"💤 Zayıf Giriş (-%{dd:.2f})")
-                    else: st.markdown(f"<span style='color: #64748B;'>⏳ Geç Kalındı: Fiyat Zaten Fırladı ({dd:.2f}%)</span>", unsafe_allow_html=True)
-                    
-                    if r.get("yapisalLongGuclu", False) and dd > 0:
-                        st.markdown("""
-                        <div style='background-color: rgba(16, 185, 129, 0.15); padding: 10px; border-radius: 6px; border-left: 4px solid #10B981; margin-top: 8px; margin-bottom: 5px;'>
-                            <span style='color: #34D399; font-weight: 700; font-size: 13px;'>🎯 YAPISAL LONG GÜÇLENMESİ AKTİF</span><br>
-                            <span style='color: #CBD5E1; font-size: 11px;'>Sinyal mumundan bu yana en yüksek kırılmadı. Fiyat şu an aşağıda, LONG yönlü maliyetlenme avantajı maksimumda!</span>
-                        </div>
-                        """, unsafe_allow_html=True)
+                fark = r.get("firsatFarkiPct", 0.0)
+                lookback = r.get("lookback", 12)
+                
+                # BÖLÜM 1: SADECE DOJİ BİLGİSİ
+                st.markdown(f"**1️⃣ Formasyon (Doji)**")
+                st.write(f"⏳ Tam olarak **{r['hoursAgo']} mum önce** bir **{r['dojiType']} Doji** oluştu.")
+                
+                if not is_buy and r.get("yapisalShortGuclu", False):
+                    st.markdown("<div style='font-size: 11px; color: #CBD5E1;'>🛡️ <i>Doji seviyesi (dip) korundu, yukarı kırılım gerçekleşmedi.</i></div>", unsafe_allow_html=True)
+                elif is_buy and r.get("yapisalLongGuclu", False):
+                    st.markdown("<div style='font-size: 11px; color: #CBD5E1;'>🛡️ <i>Doji seviyesi (tepe) korundu, aşağı kırılım gerçekleşmedi.</i></div>", unsafe_allow_html=True)
+
+                st.markdown("<br>", unsafe_allow_html=True)
+                
+                # BÖLÜM 2: SADECE GÜNCEL FIRSAT BİLGİSİ (DOJİDEN BAĞIMSIZ)
+                st.markdown(f"**2️⃣ Güncel Fırsat (Zirve/Dip Farkı)**")
+                if not is_buy: # SELL SİNYALİ İÇİN ZİRVE UZAKLIĞI
+                    if fark >= 1.0:
+                        st.error(f"🚨 **Zirve Uzaklığı:** Son {lookback} mumun en tepesinden anlık fiyata **%{fark:.2f} düşüş** var.")
+                    elif fark > 0:
+                        st.warning(f"🎯 **Zirve Uzaklığı:** Son {lookback} mumun en tepesinden anlık fiyata **%{fark:.2f} düşüş** var.")
+                    else:
+                        st.info(f"⚠️ **Zirve Noktasında:** Fiyat şu an son {lookback} mumluk periyodun en tepesinde!")
+                else: # BUY SİNYALİ İÇİN DİP UZAKLIĞI
+                    if fark >= 1.0:
+                        st.success(f"🚨 **Dip Uzaklığı:** Son {lookback} mumun en dibinden anlık fiyata **%{fark:.2f} yükseliş** var.")
+                    elif fark > 0:
+                        st.info(f"🎯 **Dip Uzaklığı:** Son {lookback} mumun en dibinden anlık fiyata **%{fark:.2f} yükseliş** var.")
+                    else:
+                        st.warning(f"⚠️ **Dip Noktasında:** Fiyat şu an son {lookback} mumluk periyodun en dibinde!")
                 
                 if "topFeatures" in r and r["topFeatures"]:
+                    st.markdown("<br>", unsafe_allow_html=True)
                     feat_str = " • ".join([f"{k}: %{v:.1f}" for k, v in r["topFeatures"].items()])
                     st.caption(f"🧠 **Model Karar Etkenleri:** {feat_str}")
 
