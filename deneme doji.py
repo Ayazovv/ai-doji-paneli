@@ -18,7 +18,7 @@ from sklearn.model_selection import TimeSeriesSplit
 st.set_page_config(page_title="AI Doji Terminali v6.9", layout="wide", initial_sidebar_state="auto")
 
 # --- HIZLANDIRICI: CACHE (ÖNBELLEK) FONKSİYONU ---
-@st.cache_data(ttl=300) 
+@st.cache_data(ttl=60) 
 def veri_indir(symbol, periyot, interval):
     return yf.download(symbol, period=periyot, interval=interval, progress=False)
 
@@ -257,29 +257,43 @@ def analiz_et_safe(market, min_hours, interval, doji_modu, is_forced):
         tam_veri_uzunlugu = len(df)
         df['Gercek_Sira'] = range(tam_veri_uzunlugu)
         
-        # --- HEDEF (TARGET) HESAPLAMA (GÜNCELLENDİ) ---
+        # --- HEDEF (TARGET) HESAPLAMA (ATR BAZLI DİNAMİK) ---
         suanki_fiyat = df['Close']
-        ilerideki_kapanis = df['Close'].shift(-int(min_hours))
+        atr_val = df['ATR'] # Zaten ATR'yi yukarıda hesaplamıştın
+        
+        # ATR çarpanı (Örneğin: 1.5 katı oynaklık)
+        carpan = 1.5 
+        
+        # Vade içindeki hareketleri izlemek için pencere (FixedForwardWindowIndexer)
         indexer = pd.api.indexers.FixedForwardWindowIndexer(window_size=int(min_hours))
         
+        # Gelecekteki High ve Low değerleri
         ilerideki_min = df['Low'].shift(-1).rolling(window=indexer).min()
-        ilerideki_max = df['High'].shift(-1).rolling(window=indexer).max() # SHORT STOPU İÇİN EKLENDİ!
+        ilerideki_max = df['High'].shift(-1).rolling(window=indexer).max()
         
-        # BUY (Long): Vade içinde %1 kar al VE %1 stop'a çarpma
-        buy_target = np.where((ilerideki_kapanis > suanki_fiyat * 1.01) & (ilerideki_min >= suanki_fiyat * 0.99), 1, 0)
+        # BUY (Long): Vade içinde ATR * carpan kadar yükseliş VE ATR * (carpan*0.5) kadar stop
+        buy_target = np.where((ilerideki_max >= suanki_fiyat + (carpan * atr_val)) & 
+                              (ilerideki_min >= suanki_fiyat - (carpan * 0.5 * atr_val)), 1, 0)
         
-        # SELL (Short): Vade içinde %1 kar al VE %1 stop'a (yukarı iğne) çarpma!
-        sell_target = np.where((ilerideki_kapanis < suanki_fiyat * 0.99) & (ilerideki_max <= suanki_fiyat * 1.01), 1, 0)
+        # SELL (Short): Vade içinde ATR * carpan kadar düşüş VE ATR * (carpan*0.5) kadar stop
+        sell_target = np.where((ilerideki_min <= suanki_fiyat - (carpan * atr_val)) & 
+                               (ilerideki_max <= suanki_fiyat + (carpan * 0.5 * atr_val)), 1, 0)
         
         df['Hedef'] = np.where(buy_target == 1, 1, np.where(sell_target == 1, 0, -1))
         
         # --- SADECE EĞİTİM İÇİN VERİYİ KES (ANA DF BOZULMAZ!) ---
         train_df = df[df['Hedef'] != -1].copy() 
         
-        features = [
-            'RSI', 'Price_to_EMA20', 'ATR', 'Upper_Shadow', 'Lower_Shadow', 
-            'MACD_Hist', 'BB_Width', 'Price_to_BB', 'Trend_Slope'
-        ]
+        # features listesi tanımlandıktan hemen sonra:
+        features = ['RSI', 'Price_to_EMA20', 'ATR', 'Upper_Shadow', 'Lower_Shadow', 
+                    'MACD_Hist', 'BB_Width', 'Price_to_BB', 'Trend_Slope']
+        
+        # Geçmiş 3 mumun ortalamasını ekle (Örn: 3 mumluk RSI değişimi)
+        df['RSI_MA3'] = df['RSI'].rolling(3).mean()
+        df['Trend_Slope_MA3'] = df['Trend_Slope'].rolling(3).mean()
+        
+        # Listeye bu yeni özellikleri ekle
+        features.extend(['RSI_MA3', 'Trend_Slope_MA3'])
         if market["category"] not in ["Forex", "Emtia", "Özel"]: features.append('Volume_Shock')
         
         feature_names_tr = {
